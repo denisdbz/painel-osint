@@ -6,12 +6,39 @@ from datetime import datetime
 
 
 def run_sherlock(username, include_nsfw=False):
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    results_dir = os.path.join(base_dir, "static", "relatorios")
+    base_dir = os.path.abspath(os.path.dirname(__file__))  # corrige path base
+    results_dir = os.path.join(base_dir, "static", "results")
     json_dir = os.path.join(base_dir, "leak_check_results")
 
+    # garante que as pastas existem
     os.makedirs(results_dir, exist_ok=True)
     os.makedirs(json_dir, exist_ok=True)
+
+    # arquivo de saída JSON
+    rel_json = os.path.join(json_dir, "ultimo_relatorio_sherlock.json")
+
+    # monta comando
+    py = sys.executable or "python3"
+    cmd = [py, "-m", "sherlock", username, "--json", rel_json]
+
+    if include_nsfw:
+        cmd.append("--nsfw")
+
+    try:
+        subprocess.run(cmd, check=True, cwd=base_dir)
+
+        # carrega o JSON gerado
+        if os.path.exists(rel_json):
+            with open(rel_json, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data
+        else:
+            return {"error": "JSON de resultados não foi gerado."}
+
+    except subprocess.CalledProcessError as e:
+        return {"error": f"Erro ao executar Sherlock: {e}"}
+    except Exception as e:
+        return {"error": str(e)}
 
     # Nome da pasta com data/hora
     data_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
