@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h2>Bem-vindo ao Painel OSINT</h2>
+    <p>Escolha uma das ferramentas abaixo:</p>
+
+    <div class="cards">
+        <a href="{{ url_for('email_leak') }}" class="card">📧 Verificar Vazamento de E-mail</a>
+        <a href="{{ url_for('metaweb') }}" class="card">📂 Análise de Metadados (MetaWeb)</a>
+        <a href="{{ url_for('sherlock_search') }}" class="card">🕵 Busca de Usuário (Sherlock)</a>
+    </div>
+{% endblock %}

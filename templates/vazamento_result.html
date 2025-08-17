@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Resultado - Vazamento</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/vazamento.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Resultados da verificação de vazamento</h1>
+        <p><b>Email verificado:</b> {{ email }}</p>
+        <div class="cards-container">
+            {% for r in resultados %}
+            <div class="card {% if r.achou %}success{% else %}danger{% endif %}">
+                <div class="card-header">
+                    <span class="status-dot {% if r.achou %}green{% else %}red{% endif %}"></span>
+                    <h3>{{ r.fonte }}</h3>
+                </div>
+                <p>
+                    {% if r.achou %}
+                        {{ r.quantidade }} resultado(s) encontrado(s)
+                    {% else %}
+                        Nenhum resultado
+                    {% endif %}
+                </p>
+                <a class="btn" href="{{ r.arquivo }}" target="_blank">Abrir Relatório</a>
+            </div>
+            {% endfor %}
+        </div>
+        <br>
+        <a href="/vazamento" class="btn-secondary">Nova busca</a>
+    </div>
+</body>
+</html>

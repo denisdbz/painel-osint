@@ -1,0 +1,56 @@
+{
+  "username": "oliveira_denis_santos",
+  "data": "2025-08-17_17-09-15",
+  "resultados": {
+    "AniWorld": {
+      "arquivo": "static/relatorios/2025-08-17_17-09-15/AniWorld.html",
+      "link": "https://aniworld.to/user/profil/oliveira_denis_santos"
+    },
+    "Freelance.habr": {
+      "arquivo": "static/relatorios/2025-08-17_17-09-15/Freelance.habr.html",
+      "link": "https://freelance.habr.com/freelancers/oliveira_denis_santos"
+    },
+    "GNOME VCS": {
+      "arquivo": "static/relatorios/2025-08-17_17-09-15/GNOME VCS.html",
+      "link": "https://gitlab.gnome.org/oliveira_denis_santos"
+    },
+    "Mydramalist": {
+      "arquivo": "static/relatorios/2025-08-17_17-09-15/Mydramalist.html",
+      "link": "https://www.mydramalist.com/profile/oliveira_denis_santos"
+    },
+    "PepperIT": {
+      "arquivo": "static/relatorios/2025-08-17_17-09-15/PepperIT.html",
+      "link": "https://www.pepper.it/profile/oliveira_denis_santos/overview"
+    },
+    "Weblate": {
+      "arquivo": "static/relatorios/2025-08-17_17-09-15/Weblate.html",
+      "link": "https://hosted.weblate.org/user/oliveira_denis_santos/"
+    },
+    "YandexMusic": {
+      "arquivo": "static/relatorios/2025-08-17_17-09-15/YandexMusic.html",
+      "link": "https://music.yandex/users/oliveira_denis_santos/playlists"
+    },
+    "dailykos": {
+      "arquivo": "static/relatorios/2025-08-17_17-09-15/dailykos.html",
+      "link": "https://www.dailykos.com/user/oliveira_denis_santos"
+    },
+    "livelib": {
+      "arquivo": "static/relatorios/2025-08-17_17-09-15/livelib.html",
+      "link": "https://www.livelib.ru/reader/oliveira_denis_santos"
+    },
+    "omg.lol": {
+      "arquivo": "static/relatorios/2025-08-17_17-09-15/omg.lol.html",
+      "link": "https://oliveira_denis_santos.omg.lol"
+    },
+    "svidbook": {
+      "arquivo": "static/relatorios/2025-08-17_17-09-15/svidbook.html",
+      "link": "https://www.svidbook.ru/user/oliveira_denis_santos"
+    },
+    "threads": {
+      "arquivo": "static/relatorios/2025-08-17_17-09-15/threads.html",
+      "link": "https://www.threads.net/@oliveira_denis_santos"
+    }
+  },
+  "stdout": "[*] Checking username oliveira_denis_santos on:\n\n[+] AniWorld: https://aniworld.to/user/profil/oliveira_denis_santos\n[+] Freelance.habr: https://freelance.habr.com/freelancers/oliveira_denis_santos\n[+] GNOME VCS: https://gitlab.gnome.org/oliveira_denis_santos\n[+] Mydramalist: https://www.mydramalist.com/profile/oliveira_denis_santos\n[+] PepperIT: https://www.pepper.it/profile/oliveira_denis_santos/overview\n[+] Weblate: https://hosted.weblate.org/user/oliveira_denis_santos/\n[+] YandexMusic: https://music.yandex/users/oliveira_denis_santos/playlists\n[+] dailykos: https://www.dailykos.com/user/oliveira_denis_santos\n[+] livelib: https://www.livelib.ru/reader/oliveira_denis_santos\n[+] omg.lol: https://oliveira_denis_santos.omg.lol\n[+] svidbook: https://www.svidbook.ru/user/oliveira_denis_santos\n[+] threads: https://www.threads.net/@oliveira_denis_santos\n\n[*] Search completed with 12 results\n",
+  "stderr": ""
+}

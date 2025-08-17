@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Rodando Sherlock...</title>
+<style>
+body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+.progress-container { width: 80%; margin: auto; background: #eee; border-radius: 10px; overflow: hidden; height: 30px; }
+.progress-bar { height: 100%; background: #007BFF; width: 0%; transition: width 0.3s; }
+#status { margin-top: 10px; font-weight: bold; }
+</style>
+</head>
+<body>
+<h2>🔎 Rodando Sherlock</h2>
+<div class="progress-container">
+    <div id="progress-bar" class="progress-bar"></div>
+</div>
+<div id="status">Iniciando...</div>
+
+<script>
+const execId = "{{ exec_id }}";
+const evtSource = new EventSource(`/sse/sherlock/${execId}`);
+
+evtSource.addEventListener("progress", function(event) {
+    const data = JSON.parse(event.data);
+    document.getElementById('progress-bar').style.width = data.percent + '%';
+    document.getElementById('status').innerText = `${data.message} (${data.percent}%)`;
+});
+
+evtSource.addEventListener("complete", function() {
+    evtSource.close();
+    document.getElementById('status').innerText = "✅ Concluído!";
+    setTimeout(() => {
+        window.location.href = `/sherlock/result/${execId}`;
+    }, 1000);
+});
+</script>
+</body>
+</html>

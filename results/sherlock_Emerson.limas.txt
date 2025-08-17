@@ -1,0 +1,20 @@
+[*] Checking username Emerson.limas on:
+
+[+] Cults3D: https://cults3d.com/en/users/Emerson.limas/creations
+[+] EyeEm: https://www.eyeem.com/u/Emerson.limas
+[+] GNOME VCS: https://gitlab.gnome.org/Emerson.limas
+[+] Giphy: https://giphy.com/Emerson.limas
+[+] kaskus: https://www.kaskus.co.id/@Emerson.limas
+[+] Lobsters: https://lobste.rs/u/Emerson.limas
+[+] Mydramalist: https://www.mydramalist.com/profile/Emerson.limas
+[+] Weblate: https://hosted.weblate.org/user/Emerson.limas/
+[+] YandexMusic: https://music.yandex/users/Emerson.limas/playlists
+[+] dailykos: https://www.dailykos.com/user/Emerson.limas
+[+] omg.lol: https://Emerson.limas.omg.lol
+[+] svidbook: https://www.svidbook.ru/user/Emerson.limas
+[+] threads: https://www.threads.net/@Emerson.limas
+
+[*] Search completed with 13 results
+
+
+--- STDERR ---

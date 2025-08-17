@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Verificando Vazamento</title>
+<style>
+body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+.progress-container { width: 80%; margin: auto; background: #eee; border-radius: 10px; overflow: hidden; height: 30px; }
+.progress-bar { height: 100%; background: #4caf50; width: 0%; transition: width 0.3s; }
+#status { margin-top: 10px; font-weight: bold; }
+
+/* Grid responsivo */
+.fontes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-top: 20px;
+}
+.fonte-card {
+    display: block;
+    padding: 10px;
+    background: white;
+    border-radius: 6px;
+    text-align: center;
+    font-weight: bold;
+    text-decoration: none;
+    color: #007BFF;
+    border: 1px solid #ddd;
+    transition: background 0.2s, transform 0.2s;
+}
+.fonte-card:hover {
+    background: #f0f8ff;
+    transform: translateY(-2px);
+}
+</style>
+</head>
+<body>
+<h2>Verificando Vazamento</h2>
+<div class="progress-container">
+    <div id="progress-bar" class="progress-bar"></div>
+</div>
+<div id="status">Iniciando...</div>
+<div id="resultado"></div>
+
+<script>
+const execId = "{{ exec_id }}";
+// Escuta o canal SSE correto
+const evtSource = new EventSource(`/sse/vazamento/${execId}`);
+
+evtSource.addEventListener("progress", function(event) {
+    const data = JSON.parse(event.data);
+    document.getElementById('progress-bar').style.width = data.percent + '%';
+    document.getElementById('status').innerText = `${data.message} (${data.percent}%)`;
+});
+
+evtSource.addEventListener("payload", function(event) {
+    const data = JSON.parse(event.data);
+    let html = `<p>${data.resumo}</p>`;
+    if (data.dados && data.dados.resultados) {
+        html += `<div class="fontes-grid">`;
+        for (let fonte in data.dados.resultados) {
+            const arquivo = data.dados.resultados[fonte];
+            html += `<a href="/static/relatorios/${data.dados.data}/${arquivo}"
+                        target="_blank" class="fonte-card">🔎 ${fonte}</a>`;
+        }
+        html += `</div>`;
+    }
+    document.getElementById('resultado').innerHTML = html;
+});
+
+evtSource.addEventListener("complete", function() {
+    evtSource.close();
+    document.getElementById('status').innerText = "✅ Concluído!";
+});
+</script>
+</body>
+</html>

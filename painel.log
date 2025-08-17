@@ -1,0 +1,82 @@
+ * Serving Flask app 'painel_unificado'
+ * Debug mode: on
+[2025-08-10 02:50:42,090] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5050
+ * Running on http://192.168.0.100:5050
+[2025-08-10 02:50:42,091] INFO: [33mPress CTRL+C to quit[0m
+[2025-08-10 02:50:42,101] INFO:  * Restarting with stat
+[2025-08-10 02:50:43,006] WARNING:  * Debugger is active!
+[2025-08-10 02:50:43,018] INFO:  * Debugger PIN: 732-616-889
+[2025-08-10 02:50:46,938] ERROR: Unhandled exception
+Traceback (most recent call last):
+  File "/root/painel/venv/lib/python3.13/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/root/painel/venv/lib/python3.13/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/painel/painel_unificado.py", line 63, in index
+    return render_template('index.html')
+  File "/root/painel/venv/lib/python3.13/site-packages/flask/templating.py", line 150, in render_template
+    return _render(app, template, context)
+  File "/root/painel/venv/lib/python3.13/site-packages/flask/templating.py", line 131, in _render
+    rv = template.render(context)
+  File "/root/painel/venv/lib/python3.13/site-packages/jinja2/environment.py", line 1295, in render
+    self.environment.handle_exception()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/root/painel/venv/lib/python3.13/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "/root/painel/templates/index.html", line 1, in top-level template code
+    {% extends "base.html" %}
+  File "/root/painel/templates/base.html", line 46, in top-level template code
+    <a href="{{ url_for('sherlock') }}">Sherlock</a>
+    ^^^^^^^^^^^^^
+  File "/root/painel/venv/lib/python3.13/site-packages/flask/app.py", line 1121, in url_for
+    return self.handle_url_build_error(error, endpoint, values)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/painel/venv/lib/python3.13/site-packages/flask/app.py", line 1110, in url_for
+    rv = url_adapter.build(  # type: ignore[union-attr]
+        endpoint,
+    ...<3 lines>...
+        force_external=_external,
+    )
+  File "/root/painel/venv/lib/python3.13/site-packages/werkzeug/routing/map.py", line 924, in build
+    raise BuildError(endpoint, values, method, self)
+werkzeug.routing.exceptions.BuildError: Could not build url for endpoint 'sherlock'. Did you mean 'sherlock_search' instead?
+[2025-08-10 02:50:46,946] INFO: 127.0.0.1 - - [10/Aug/2025 02:50:46] "[35m[1mGET / HTTP/1.1[0m" 500 -
+[2025-08-10 02:50:48,642] ERROR: Unhandled exception
+Traceback (most recent call last):
+  File "/root/painel/venv/lib/python3.13/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/root/painel/venv/lib/python3.13/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/painel/painel_unificado.py", line 63, in index
+    return render_template('index.html')
+  File "/root/painel/venv/lib/python3.13/site-packages/flask/templating.py", line 150, in render_template
+    return _render(app, template, context)
+  File "/root/painel/venv/lib/python3.13/site-packages/flask/templating.py", line 131, in _render
+    rv = template.render(context)
+  File "/root/painel/venv/lib/python3.13/site-packages/jinja2/environment.py", line 1295, in render
+    self.environment.handle_exception()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/root/painel/venv/lib/python3.13/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "/root/painel/templates/index.html", line 1, in top-level template code
+    {% extends "base.html" %}
+  File "/root/painel/templates/base.html", line 46, in top-level template code
+    <a href="{{ url_for('sherlock') }}">Sherlock</a>
+    ^^^^^^^^^^^^^
+  File "/root/painel/venv/lib/python3.13/site-packages/flask/app.py", line 1121, in url_for
+    return self.handle_url_build_error(error, endpoint, values)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/painel/venv/lib/python3.13/site-packages/flask/app.py", line 1110, in url_for
+    rv = url_adapter.build(  # type: ignore[union-attr]
+        endpoint,
+    ...<3 lines>...
+        force_external=_external,
+    )
+  File "/root/painel/venv/lib/python3.13/site-packages/werkzeug/routing/map.py", line 924, in build
+    raise BuildError(endpoint, values, method, self)
+werkzeug.routing.exceptions.BuildError: Could not build url for endpoint 'sherlock'. Did you mean 'sherlock_search' instead?
+[2025-08-10 02:50:48,648] INFO: 127.0.0.1 - - [10/Aug/2025 02:50:48] "[35m[1mGET / HTTP/1.1[0m" 500 -

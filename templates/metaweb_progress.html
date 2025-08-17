@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Análise MetaWeb</title>
+<style>
+body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+.progress-container { width: 80%; margin: auto; background: #eee; border-radius: 10px; overflow: hidden; height: 30px; }
+.progress-bar { height: 100%; background: #2196f3; width: 0%; transition: width 0.3s; }
+#status { margin-top: 10px; font-weight: bold; }
+</style>
+</head>
+<body>
+<h2>Analisando Arquivo (MetaWeb)</h2>
+<div class="progress-container">
+    <div id="progress-bar" class="progress-bar"></div>
+</div>
+<div id="status">Iniciando...</div>
+
+<script>
+const execId = "{{ exec_id }}";
+const evtSource = new EventSource(`/metaweb/progress?exec_id=${execId}`);
+
+evtSource.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    document.getElementById('progress-bar').style.width = data.progress + '%';
+    document.getElementById('status').innerText = `${data.tool} - ${data.progress}%`;
+    if (data.final) {
+        evtSource.close();
+        document.getElementById('status').innerText = "✅ Concluído!";
+        fetch(`/metaweb/results?exec_id=${execId}`)
+            .then(r => r.json())
+            .then(res => console.log("Resultados:", res));
+    }
+};
+</script>
+</body>
+</html>

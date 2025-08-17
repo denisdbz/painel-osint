@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Verificar Vazamento de E-mail</h2>
+<form id="form-vazamento" method="POST">
+    <input type="email" name="email" placeholder="Digite seu e-mail" required>
+    <button type="submit">Verificar</button>
+</form>
+
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+
+<hr>
+
+<div id="vazamento-resultado" style="display:none;">
+    <h3>Resultados da verificação</h3>
+    <div id="vazamento-output"></div>
+    <a href="{{ url_for('email_leak') }}" class="botao-voltar">🔄 Nova busca</a>
+</div>
+
+<script>
+document.getElementById('form-vazamento').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const fd = new FormData(form);
+
+    const resp = await fetch("{{ url_for('vazamento_start') }}", { method: "POST", body: fd });
+    const json = await resp.json();
+    if (!json.ok) {
+        alert(json.error || "Erro ao iniciar verificação");
+        return;
+    }
+
+    const taskId = json.task_id;
+    // agora usamos a função genérica disponibilizada em base.html
+    startVazamentoProgress(taskId, (payload) => {
+        const dados = payload && (payload.dados || payload.resultado);
+        if (dados && dados.resultados) {
+            let html = `<p>${payload.resumo || ""}</p><div class="fontes-grid">`;
+            for (let fonte in dados.resultados) {
+                const arquivo = dados.resultados[fonte];
+                html += `<a href="/static/relatorios/${dados.data}/${arquivo}" target="_blank" class="fonte-card">🔎 ${fonte}</a>`;
+            }
+            html += `</div>`;
+            document.getElementById('vazamento-output').innerHTML = html;
+        } else {
+            document.getElementById('vazamento-output').innerHTML =
+                `<pre>${JSON.stringify(dados || {}, null, 2)}</pre>`;
+        }
+        document.getElementById('vazamento-resultado').style.display = 'block';
+    });
+});
+</script>
+{% endblock %}

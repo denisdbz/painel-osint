@@ -1,0 +1,27 @@
+{
+  "email": "oliveira.daniel21@yahoo.com.br",
+  "data": "2025-08-17_17-40-22",
+  "resultados": {
+    "google": "Google.html",
+    "bing": "Bing.html",
+    "duckduckgo": "DuckDuckGo.html",
+    "yahoo": "Yahoo.html",
+    "ask": "Ask.html",
+    "yandex": "Yandex.html",
+    "ahmia": "Ahmia.html",
+    "onionland": "OnionLand.html",
+    "onionsearch": "OnionSearch.html",
+    "torch": "Torch.html",
+    "darksearch": "DarkSearch.html",
+    "phobos": "Phobos.html",
+    "pastebin": "Pastebin.html",
+    "github": "GitHub.html",
+    "gitlab": "GitLab.html",
+    "reddit": "Reddit.html",
+    "twitter": "Twitter.html",
+    "facebook": "Facebook.html",
+    "haveibeenpwned": "HaveIBeenPwned.html",
+    "leakcheck": "LeakCheck.html",
+    "breachdirectory": "BreachDirectory.html"
+  }
+}

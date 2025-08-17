@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Progresso</title>
+    <style>
+        body {
+            background-color: #000;
+            color: #0f0;
+            font-family: monospace;
+            margin: 0;
+            padding: 20px;
+        }
+        #log {
+            background: #111;
+            border: 1px solid #0f0;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .done {
+            color: #0ff;
+        }
+    </style>
+</head>
+<body>
+    <h1>Execução em Progresso</h1>
+    <div id="log">Iniciando...\n</div>
+
+    <script>
+        const logEl = document.getElementById("log");
+
+        const source = new EventSource("/progress-stream/{{ task_id }}");
+        source.onmessage = function (event) {
+            if (event.data === "__COMPLETE__") {
+                logEl.innerHTML += "\n✅ Concluído!\n";
+                logEl.classList.add("done");
+                source.close();
+            } else {
+                logEl.innerHTML += event.data + "\n";
+            }
+            logEl.scrollTop = logEl.scrollHeight;
+        };
+
+        source.onerror = function () {
+            logEl.innerHTML += "\n⚠ Erro na conexão de progresso.\n";
+            source.close();
+        };
+    </script>
+</body>
+</html>

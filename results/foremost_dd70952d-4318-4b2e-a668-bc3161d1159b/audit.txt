@@ -1,0 +1,23 @@
+Foremost version 1.5.7 by Jesse Kornblum, Kris Kendall, and Nick Mikus
+Audit File
+
+Foremost started at Thu Aug 14 01:37:17 2025
+Invocation: foremost -t all -i /root/painel/uploads/bf43257b-5639-4164-adad-c4f874d2b296__1755135432029442181898259385806.jpg -o /root/painel/results/foremost_dd70952d-4318-4b2e-a668-bc3161d1159b 
+Output directory: /root/painel/results/foremost_dd70952d-4318-4b2e-a668-bc3161d1159b
+Configuration file: /etc/foremost.conf
+------------------------------------------------------------------
+File: /root/painel/uploads/bf43257b-5639-4164-adad-c4f874d2b296__1755135432029442181898259385806.jpg
+Start: Thu Aug 14 01:37:17 2025
+Length: 4 MB (4399378 bytes)
+ 
+Num	 Name (bs=512)	       Size	 File Offset	 Comment 
+
+0:	00000000.jpg 	       4 MB 	          0 	 
+Finish: Thu Aug 14 01:37:17 2025
+
+1 FILES EXTRACTED
+	
+jpg:= 1
+------------------------------------------------------------------
+
+Foremost finished at Thu Aug 14 01:37:17 2025

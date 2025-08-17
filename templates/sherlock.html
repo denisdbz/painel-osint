@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Sherlock - Busca de Usuário</h2>
+<form id="form-sherlock" method="POST">
+    <input type="text" name="username" placeholder="Digite o nome de usuário" required>
+    <label>
+        <input type="checkbox" name="nsfw"> Incluir sites NSFW (opcional)
+    </label>
+    <button type="submit">Buscar</button>
+</form>
+
+{% if error %}
+    <p class="error">{{ error }}</p>
+{% endif %}
+<hr>
+
+<div id="sherlock-resultado" style="display:none;">
+    <h3>Resultados do Sherlock</h3>
+    <div id="sherlock-output"></div>
+    <a href="{{ url_for('sherlock_search') }}" class="botao-voltar">🔄 Nova busca</a>
+</div>
+
+<script>
+document.getElementById('form-sherlock').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const fd = new FormData(form);
+
+    const resp = await fetch("{{ url_for('sherlock_start') }}", { method: "POST", body: fd });
+    const json = await resp.json();
+    if (!json.ok) {
+        alert(json.error || "Erro ao iniciar Sherlock");
+        return;
+    }
+
+    const taskId = json.task_id;
+    // usamos a função genérica de base.html para SSE
+    startSherlockProgress(taskId, (payload) => {
+        const dados = payload && (payload.dados || payload.resultado);
+        if (dados && dados.resultados) {
+            let html = `<p>${payload.resumo || ""}</p><div class="fontes-grid">`;
+            for (let fonte in dados.resultados) {
+                const info = dados.resultados[fonte];
+                html += `<div class="fonte-card">
+                            <a href="${info.arquivo}" target="_blank">📄 Relatório ${fonte}</a><br>
+                            <a href="${info.link}" target="_blank">🔗 Perfil real</a>
+                         </div>`;
+            }
+            html += `</div>`;
+            document.getElementById('sherlock-output').innerHTML = html;
+        } else {
+            document.getElementById('sherlock-output').innerHTML =
+                `<pre>${JSON.stringify(dados || {}, null, 2)}</pre>`;
+        }
+        document.getElementById('sherlock-resultado').style.display = 'block';
+    });
+});
+</script>
+{% endblock %}
