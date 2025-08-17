@@ -1,54 +1,98 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Verificar Vazamento de E-mail</h2>
-<form id="form-vazamento" method="POST">
-    <input type="email" name="email" placeholder="Digite seu e-mail" required>
-    <button type="submit">Verificar</button>
-</form>
+<div class="painel">
+    <h2>📧 Vazamento de Dados</h2>
+    <p>Verifique se um e-mail aparece em relatórios de vazamento de dados públicos.</p>
 
-{% if error %}
-<p class="error">{{ error }}</p>
-{% endif %}
+    <!-- Formulário -->
+    <form id="vazamento-form">
+        <div class="campo">
+            <label for="email">Digite o e-mail:</label>
+            <input type="email" id="email" name="email" placeholder="exemplo@dominio.com" required>
+        </div>
+        <button type="submit" class="botao">🔍 Verificar</button>
+    </form>
 
-<hr>
+    <!-- Progresso -->
+    <div id="vazamento-progress" class="progress-container" style="display:none;">
+        <p id="vazamento-status">⏳ Iniciando verificação...</p>
+        <div class="progress-bar">
+            <div id="vazamento-bar" class="progress"></div>
+        </div>
+    </div>
 
-<div id="vazamento-resultado" style="display:none;">
-    <h3>Resultados da verificação</h3>
-    <div id="vazamento-output"></div>
-    <a href="{{ url_for('email_leak') }}" class="botao-voltar">🔄 Nova busca</a>
+    <!-- Resultado -->
+    <div id="vazamento-resultado" class="resultado" style="display:none;">
+        <h3>📊 Resultado</h3>
+        <div id="vazamento-output"></div>
+    </div>
 </div>
 
 <script>
-document.getElementById('form-vazamento').addEventListener('submit', async function(e) {
+document.getElementById('vazamento-form').addEventListener('submit', async function(e) {
     e.preventDefault();
-    const form = e.target;
-    const fd = new FormData(form);
+    const email = document.getElementById('email').value;
 
-    const resp = await fetch("{{ url_for('vazamento_start') }}", { method: "POST", body: fd });
-    const json = await resp.json();
-    if (!json.ok) {
-        alert(json.error || "Erro ao iniciar verificação");
-        return;
-    }
+    // reset
+    document.getElementById('vazamento-progress').style.display = 'block';
+    document.getElementById('vazamento-status').textContent = '⏳ Iniciando verificação...';
+    document.getElementById('vazamento-bar').style.width = '0%';
+    document.getElementById('vazamento-resultado').style.display = 'none';
+    document.getElementById('vazamento-output').innerHTML = '';
 
-    const taskId = json.task_id;
-    // agora usamos a função genérica disponibilizada em base.html
+    // inicia task
+    const res = await fetch('/start_vazamento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ email })
+    });
+    const data = await res.json();
+    const taskId = data.task_id;
+
+    // progresso
     startVazamentoProgress(taskId, (payload) => {
         const dados = payload && (payload.dados || payload.resultado);
+        let html = `<p>${payload.resumo || ""}</p>`;
+
+        // Relatórios encontrados
         if (dados && dados.resultados) {
-            let html = `<p>${payload.resumo || ""}</p><div class="fontes-grid">`;
+            html += `<h4>📂 Relatórios encontrados:</h4><div class="fontes-grid">`;
             for (let fonte in dados.resultados) {
                 const arquivo = dados.resultados[fonte];
                 html += `<a href="/static/relatorios/${dados.data}/${arquivo}" target="_blank" class="fonte-card">🔎 ${fonte}</a>`;
             }
             html += `</div>`;
-            document.getElementById('vazamento-output').innerHTML = html;
-        } else {
-            document.getElementById('vazamento-output').innerHTML =
-                `<pre>${JSON.stringify(dados || {}, null, 2)}</pre>`;
         }
+
+        // Links de busca
+        if (payload.links && payload.links.length > 0) {
+            html += `<h4>🌍 Links de busca:</h4><ul>`;
+            payload.links.forEach(l => {
+                html += `<li><a href="${l.url}" target="_blank">${l.nome}</a></li>`;
+            });
+            html += `</ul>`;
+        }
+
+        document.getElementById('vazamento-output').innerHTML = html;
         document.getElementById('vazamento-resultado').style.display = 'block';
     });
 });
 </script>
+
+<style>
+#vazamento-output ul {
+    list-style: none;
+    padding-left: 0;
+}
+#vazamento-output ul li {
+    margin: 4px 0;
+}
+#vazamento-output ul li a {
+    color: #0078d4;
+    text-decoration: none;
+}
+#vazamento-output ul li a:hover {
+    text-decoration: underline;
+}
+</style>
 {% endblock %}

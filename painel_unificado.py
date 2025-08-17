@@ -15,7 +15,6 @@ app = Flask(__name__)
 CORS(app)  # <<< ADICIONADO
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 TOOLS_DIR = os.path.join(BASE_DIR, "tools")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 RESULTS_DIR = os.path.join(BASE_DIR, "results")
@@ -88,12 +87,18 @@ def montar_links_busca(email: str):
 # ========= Filtro para limpar resultados inúteis =========
 def filtrar_resultados(links, email):
     """
-    Remove links irrelevantes (.js, .css, .svg, etc.) e mantém apenas URLs úteis.
+    Remove links irrelevantes e duplicados (.js, .css, imagens, etc.) e mantém apenas URLs úteis.
     """
+    extensoes_ruins = [".js", ".css", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".woff", ".ico"]
+    vistos = set()
     filtrados = {}
+
     for nome, url in links.items():
-        if any(url.endswith(ext) for ext in [".js", ".css", ".svg", ".png", ".jpg", ".woff"]):
+        if any(url.lower().endswith(ext) for ext in extensoes_ruins):
             continue
+        if url in vistos:
+            continue
+        vistos.add(url)
         filtrados[nome] = url
     return filtrados
 
@@ -247,9 +252,10 @@ def _run_vazamento_task(task_id: str, email: str):
         links = montar_links_busca(email)
         links = filtrar_resultados(links, email)
 
+        # envia lista organizada (nome + url)
         _push_event(task_id, "payload", {
             "dados": dados,
-            "links": links,
+            "links": [{"nome": nome, "url": url} for nome, url in links.items()],
             "resumo": f"Verificação concluída para {email}"
         })
         _push_event(task_id, "complete", {"ok": True})
