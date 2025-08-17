@@ -14,9 +14,7 @@ from flask_cors import CORS  # <<< ADICIONADO
 app = Flask(__name__)
 CORS(app)  # <<< ADICIONADO
 
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 
 TOOLS_DIR = os.path.join(BASE_DIR, "tools")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
@@ -67,6 +65,24 @@ def _sse_stream_named(task_id: str):
 
         if etype in ("complete", "error"):
             break
+
+
+# ========= Função de links de busca =========
+def montar_links_busca(email: str):
+    email_q = f'"{email}"'  # busca exata
+
+    return {
+        "Google": f"https://www.google.com/search?q={email_q}",
+        "Bing": f"https://www.bing.com/search?q={email_q}",
+        "DuckDuckGo": f"https://duckduckgo.com/?q={email_q}",
+        "Yahoo": f"https://search.yahoo.com/search?p={email_q}",
+        "Yandex": f"https://yandex.com/search/?text={email_q}",
+        "GitHub": f"https://github.com/search?q={email_q}",
+        "Pastebin": f"https://pastebin.com/search?q={email_q}",
+        "Twitter/X": f"https://x.com/search?q={email_q}&src=typed_query",
+        "Reddit": f"https://www.reddit.com/search/?q={email_q}",
+        "LinkedIn": f"https://www.linkedin.com/search/results/all/?keywords={email_q}"
+    }
 
 
 # ========== ROTAS BÁSICAS ==========
@@ -214,7 +230,14 @@ def _run_vazamento_task(task_id: str, email: str):
             with open(rel_json, "r", encoding="utf-8") as f:
                 dados = json.load(f)
 
-        _push_event(task_id, "payload", {"dados": dados, "resumo": f"Verificação concluída para {email}"})
+        # 🔗 adiciona links de busca exata
+        links = montar_links_busca(email)
+
+        _push_event(task_id, "payload", {
+            "dados": dados,
+            "links": links,
+            "resumo": f"Verificação concluída para {email}"
+        })
         _push_event(task_id, "complete", {"ok": True})
     except Exception as e:
         _push_event(task_id, "error", {"message": str(e)})
