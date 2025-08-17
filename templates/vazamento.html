@@ -51,11 +51,21 @@ document.getElementById('vazamento-form').addEventListener('submit', async funct
 
     // progresso
     startVazamentoProgress(taskId, (payload) => {
-        const dados = payload && (payload.dados || payload.resultado);
-        let html = `<p>${payload.resumo || ""}</p>`;
+        if (!payload) return;
+
+        // pega resultado do Celery
+        const resultado = payload.resultado || {};
+        const dados = resultado.dados || {};
+        const links = resultado.links || [];
+        const resumo = resultado.resumo || "";
+
+        let html = "";
+        if (resumo) {
+            html += `<p>${resumo}</p>`;
+        }
 
         // Relatórios encontrados
-        if (dados && dados.resultados) {
+        if (dados.resultados) {
             html += `<h4>📂 Relatórios encontrados:</h4><div class="fontes-grid">`;
             for (let fonte in dados.resultados) {
                 const arquivo = dados.resultados[fonte];
@@ -65,9 +75,9 @@ document.getElementById('vazamento-form').addEventListener('submit', async funct
         }
 
         // Links de busca
-        if (payload.links && payload.links.length > 0) {
+        if (links.length > 0) {
             html += `<h4>🌍 Links de busca:</h4><ul>`;
-            payload.links.forEach(l => {
+            links.forEach(l => {
                 html += `<li><a href="${l.url}" target="_blank">${l.nome}</a></li>`;
             });
             html += `</ul>`;
