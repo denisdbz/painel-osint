@@ -86,9 +86,6 @@ def montar_links_busca(email: str):
 
 # ========= Filtro para limpar resultados inúteis =========
 def filtrar_resultados(links, email):
-    """
-    Remove links irrelevantes e duplicados (.js, .css, imagens, etc.) e mantém apenas URLs úteis.
-    """
     extensoes_ruins = [".js", ".css", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".woff", ".ico"]
     vistos = set()
     filtrados = {}
@@ -209,8 +206,8 @@ def sherlock_result(task_id):
             "fonte": fonte,
             "achou": True,
             "quantidade": 1,
-            "arquivo": info["arquivo"],  # ✅ já vem pronto no JSON
-            "link": info["link"]         # ✅ link real encontrado
+            "arquivo": info["arquivo"],
+            "link": info["link"]
         })
 
     stderr = data.get("stderr", "")
@@ -238,9 +235,13 @@ def _run_vazamento_task(task_id: str, email: str):
             stderr=subprocess.PIPE,
             text=True
         )
-        while proc.poll() is None:
+
+        # ✅ leitura assíncrona até finalizar
+        while True:
+            ret = proc.poll()
+            if ret is not None:
+                break
             time.sleep(0.5)
-        proc.wait()
 
         rel_json = os.path.join(BASE_DIR, "leak_check_results", "ultimo_relatorio.json")
         dados = {}
@@ -248,11 +249,9 @@ def _run_vazamento_task(task_id: str, email: str):
             with open(rel_json, "r", encoding="utf-8") as f:
                 dados = json.load(f)
 
-        # 🔗 adiciona links de busca exata + aplica filtro
         links = montar_links_busca(email)
         links = filtrar_resultados(links, email)
 
-        # envia lista organizada (nome + url)
         _push_event(task_id, "payload", {
             "dados": dados,
             "links": [{"nome": nome, "url": url} for nome, url in links.items()],
@@ -283,9 +282,6 @@ def _run_metaweb_task(task_id: str, filepath: str):
 
 
 def _run_sherlock_task(task_id: str, username: str, include_nsfw: bool):
-    """
-    Agora usando o runner (tools/sherlock_runner.py), que gera HTMLs e JSON.
-    """
     _push_event(task_id, "progress", {"percent": 1, "message": "Executando Sherlock..."})
 
     py = sys.executable or "python3"
@@ -302,7 +298,13 @@ def _run_sherlock_task(task_id: str, username: str, include_nsfw: bool):
             stderr=subprocess.PIPE,
             text=True
         )
-        proc.wait()
+
+        # ✅ espera não bloqueante
+        while True:
+            ret = proc.poll()
+            if ret is not None:
+                break
+            time.sleep(0.5)
 
         rel_json = os.path.join(BASE_DIR, "leak_check_results", "ultimo_relatorio_sherlock.json")
         dados = {}
@@ -318,6 +320,5 @@ def _run_sherlock_task(task_id: str, username: str, include_nsfw: bool):
 
 # ========== MAIN ==========
 if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 5050))  # usa a porta do ambiente ou 5050
+    port = int(os.environ.get("PORT", 5050))
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
