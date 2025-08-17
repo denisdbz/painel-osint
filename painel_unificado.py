@@ -127,9 +127,8 @@ def ajuda():
 
 
 # ========== START ==========
-@app.route("/vazamento/start", methods=["POST"])
-def vazamento_start():
-    email = request.form.get("email", "").strip()
+@app.route("/start_vazamento", methods=["POST"])
+def vazamento_start():    email = request.form.get("email", "").strip()
     if not email:
         return jsonify({"ok": False, "error": "Email não informado"}), 400
     task_id = str(uuid.uuid4())
