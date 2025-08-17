@@ -85,6 +85,19 @@ def montar_links_busca(email: str):
     }
 
 
+# ========= Filtro para limpar resultados inúteis =========
+def filtrar_resultados(links, email):
+    """
+    Remove links irrelevantes (.js, .css, .svg, etc.) e mantém apenas URLs úteis.
+    """
+    filtrados = {}
+    for nome, url in links.items():
+        if any(url.endswith(ext) for ext in [".js", ".css", ".svg", ".png", ".jpg", ".woff"]):
+            continue
+        filtrados[nome] = url
+    return filtrados
+
+
 # ========== ROTAS BÁSICAS ==========
 @app.route("/")
 def index():
@@ -230,8 +243,9 @@ def _run_vazamento_task(task_id: str, email: str):
             with open(rel_json, "r", encoding="utf-8") as f:
                 dados = json.load(f)
 
-        # 🔗 adiciona links de busca exata
+        # 🔗 adiciona links de busca exata + aplica filtro
         links = montar_links_busca(email)
+        links = filtrar_resultados(links, email)
 
         _push_event(task_id, "payload", {
             "dados": dados,
