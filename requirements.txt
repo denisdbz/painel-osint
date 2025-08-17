@@ -3,4 +3,4 @@ flask-cors
 requests
 pandas
 colorama
-sherlock-project
+git+https://github.com/sherlock-project/sherlock.git
