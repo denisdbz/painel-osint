@@ -11,7 +11,8 @@
         <h1>Painel OSINT Unificado</h1>
         <nav>
             <a href="{{ url_for('index') }}">🏠 Início</a>
-	    <a href="{{ url_for('vazamento_start') }}">📧 Vazamento</a>            <a href="{{ url_for('metaweb') }}">📂 MetaWeb</a>
+            <a href="{{ url_for('vazamento_start') }}">📧 Vazamento</a>
+            <a href="{{ url_for('metaweb') }}">📂 MetaWeb</a>
             <a href="{{ url_for('sherlock') }}">🕵 Sherlock</a>
             <a href="{{ url_for('ajuda') }}">❓ Ajuda</a>
         </nav>
@@ -115,15 +116,15 @@
             return es;
         }
 
-// Padrões para cada ferramenta
-window.startSherlockProgress = (taskId, onComplete) =>
-    setupProgressEventSource(`/sse/sherlock/${taskId}`, onComplete);
+        // Padrões para cada ferramenta
+        window.startSherlockProgress = (taskId, onComplete) =>
+            setupProgressEventSource(`/sse/sherlock/${taskId}`, onComplete);
 
-window.startVazamentoProgress = (taskId, onComplete) =>
-    setupProgressEventSource(`/sse/vazamento/${taskId}`, onComplete);
+        window.startVazamentoProgress = (taskId, onComplete) =>
+            setupProgressEventSource(`/sse/vazamento/${taskId}`, onComplete);
 
-window.startMetawebProgress = (taskId, onComplete) =>
-    setupProgressEventSource(`/sse/metaweb/${taskId}`, onComplete);
+        window.startMetawebProgress = (taskId, onComplete) =>
+            setupProgressEventSource(`/sse/metaweb/${taskId}`, onComplete);
 
     </script>
 </body>

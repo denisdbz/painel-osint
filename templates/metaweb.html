@@ -14,7 +14,8 @@ document.getElementById('metaweb-form').addEventListener('submit', async (e) => 
     e.preventDefault();
     const fd = new FormData(e.target);
 
-    const resp = await fetch("{{ url_for('start_metaweb') }}", { method: 'POST', body: fd });
+    // corrigido para usar 'metaweb'
+    const resp = await fetch("{{ url_for('metaweb') }}", { method: 'POST', body: fd });
     const data = await resp.json();
     if (data.error) { alert(data.error); return; }
 
