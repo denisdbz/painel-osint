@@ -53,10 +53,11 @@ document.getElementById('vazamento-form').addEventListener('submit', async funct
     startVazamentoProgress(taskId, (payload) => {
         if (!payload) return;
 
-        // pega resultado direto do payload
-        const dados = payload.dados || {};
-        const links = payload.links || [];
-        const resumo = payload.resumo || "";
+        // pega resultado do Celery
+        const resultado = payload.resultado || {};
+        const dados = resultado.dados || {};
+        const links = resultado.links || [];
+        const resumo = resultado.resumo || "";
 
         let html = "";
         if (resumo) {
@@ -68,7 +69,7 @@ document.getElementById('vazamento-form').addEventListener('submit', async funct
             html += `<h4>📂 Relatórios encontrados:</h4><div class="fontes-grid">`;
             for (let fonte in dados.resultados) {
                 const arquivo = dados.resultados[fonte];
-                html += `<a href="/static/relatorios/${dados.data}/${arquivo}" target="_blank" class="fonte-card">🔎 ${fonte}</a>`;
+                html += `<a href="/relatorio/${dados.data}/${arquivo}" target="_blank" class="fonte-card">🔎 ${fonte}</a>`;
             }
             html += `</div>`;
         }

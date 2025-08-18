@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="painel">
+    <h2>📑 Relatório: {{ arquivo }}</h2>
+
+    <div class="relatorio-conteudo">
+        {{ conteudo|safe }}
+    </div>
+
+    <br>
+    <a href="{{ url_for('index') }}" class="botao">⬅ Voltar</a>
+</div>
+
+<style>
+.relatorio-conteudo {
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    padding: 15px;
+    border-radius: 10px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+}
+</style>
+{% endblock %}
