@@ -53,11 +53,10 @@ document.getElementById('vazamento-form').addEventListener('submit', async funct
     startVazamentoProgress(taskId, (payload) => {
         if (!payload) return;
 
-        // pega resultado do Celery
-        const resultado = payload.resultado || {};
-        const dados = resultado.dados || {};
-        const links = resultado.links || [];
-        const resumo = resultado.resumo || "";
+        // pega resultado direto do payload
+        const dados = payload.dados || {};
+        const links = payload.links || [];
+        const resumo = payload.resumo || "";
 
         let html = "";
         if (resumo) {
