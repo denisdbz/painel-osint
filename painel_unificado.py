@@ -1,297 +1,243 @@
+#!/usr/bin/env python3
 import os
 import sys
 import json
 import uuid
 import time
+import shutil
 import threading
 import subprocess
 from flask import (
-    Flask, render_template, request, jsonify, Response
+    Flask, render_template, request, jsonify, Response, redirect, url_for
 )
-from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)
 
+# --- Pastas base ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TOOLS_DIR = os.path.join(BASE_DIR, "tools")
-RESULTS_DIR = os.path.join(BASE_DIR, "results")
-UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
-PROGRESS_DIR = os.path.join(BASE_DIR, "progress")
-RELATORIOS_DIR = os.path.join(BASE_DIR, "static", "relatorios")
 
-for d in [RESULTS_DIR, UPLOADS_DIR, PROGRESS_DIR, RELATORIOS_DIR]:
+TOOLS_DIR = os.path.join(BASE_DIR, "tools")
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+RESULTS_DIR = os.path.join(BASE_DIR, "results")
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+
+for d in (UPLOAD_DIR, RESULTS_DIR):
     os.makedirs(d, exist_ok=True)
 
-
-def run_tool(command, progress_file, result_file):
-    """Executa ferramenta em subprocesso e grava progresso/resultados"""
-    with open(progress_file, "w") as f:
-        f.write("0")
-
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1
-    )
-
-    output_lines = []
-    for i, line in enumerate(process.stdout, start=1):
-        output_lines.append(line.strip())
-        with open(progress_file, "w") as f:
-            f.write(str(min(100, i)))
-
-    process.wait()
-    with open(result_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(output_lines))
-
-    with open(progress_file, "w") as f:
-        f.write("100")
+# --- Infra simples de SSE em memória ---
+TASK_COND = {}
+TASK_QUEUE = {}
+TASK_TOOL = {}  # task_id -> "vazamento" | "metaweb" | "sherlock"
 
 
+def _ensure_task(task_id: str, tool: str = None):
+    if task_id not in TASK_COND:
+        TASK_COND[task_id] = threading.Condition()
+        TASK_QUEUE[task_id] = []
+    if tool:
+        TASK_TOOL[task_id] = tool
+
+
+def _push_event(task_id: str, etype: str, payload: dict):
+    _ensure_task(task_id)
+    cond = TASK_COND[task_id]
+    with cond:
+        TASK_QUEUE[task_id].append((etype, payload))
+        cond.notify_all()
+
+
+def _sse_stream_named(task_id: str):
+    _ensure_task(task_id)
+    cond = TASK_COND[task_id]
+    idx = 0
+    while True:
+        with cond:
+            if idx >= len(TASK_QUEUE[task_id]):
+                cond.wait(timeout=30)
+            if idx >= len(TASK_QUEUE[task_id]):
+                yield ": keep-alive\n\n"
+                continue
+            etype, payload = TASK_QUEUE[task_id][idx]
+            idx += 1
+
+        yield f"event: {etype}\n"
+        yield "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+
+        if etype in ("complete", "error"):
+            break
+
+
+# ========== ROTAS BÁSICAS ==========
 @app.route("/")
 def index():
     return render_template("index.html")
 
 
-@app.route("/ajuda")
-def ajuda():
-    return render_template("ajuda.html")
-
-
-@app.route("/sherlock")
-def sherlock():
-    return render_template("sherlock.html")
-
-
-@app.route("/vazamento")
-def vazamento():
+@app.route("/vazamento", methods=["GET"])
+def email_leak():
     return render_template("vazamento.html")
 
 
-@app.route("/metaweb")
+@app.route("/metaweb", methods=["GET"])
 def metaweb():
     return render_template("metaweb.html")
 
 
-# ----------------- SHERLOCK -----------------
-@app.route("/start_sherlock", methods=["POST"])
-def start_sherlock():
-    username = request.form.get("username")
-    if not username:
-        return jsonify({"error": "Usuário não informado"}), 400
-
-    task_id = str(uuid.uuid4())
-    progress_file = os.path.join(PROGRESS_DIR, f"sherlock_{task_id}.txt")
-    result_file = os.path.join(RESULTS_DIR, f"sherlock_{task_id}.txt")
-
-    thread = threading.Thread(
-        target=run_tool,
-        args=(["python3", os.path.join(TOOLS_DIR, "sherlock.py"), username],
-              progress_file, result_file)
-    )
-    thread.start()
-
-    return jsonify({"task_id": task_id})
+@app.route("/sherlock", methods=["GET"])
+def sherlock_search():
+    return render_template("sherlock.html")
 
 
-@app.route("/sherlock_progress/<task_id>")
-def sherlock_progress(task_id):
-    progress_file = os.path.join(PROGRESS_DIR, f"sherlock_{task_id}.txt")
-    result_file = os.path.join(RESULTS_DIR, f"sherlock_{task_id}.txt")
-
-    def generate():
-        while True:
-            progress = "0"
-            if os.path.exists(progress_file):
-                with open(progress_file) as f:
-                    progress = f.read().strip()
-
-            yield f"data: {json.dumps({'progress': progress})}\n\n"
-
-            if progress == "100" and os.path.exists(result_file):
-                with open(result_file, encoding="utf-8") as f:
-                    result = f.read()
-                yield f"data: {json.dumps({'progress': 100, 'result': result})}\n\n"
-                break
-            time.sleep(1)
-
-    return Response(generate(), mimetype="text/event-stream")
+@app.route("/ajuda", methods=["GET"])
+def ajuda():
+    return render_template("ajuda.html")
 
 
-# ----------------- VAZAMENTO -----------------
-@app.route("/start_vazamento", methods=["POST"])
-def start_vazamento():
-    email = request.form.get("email")
+# ========== START ==========
+@app.route("/vazamento/start", methods=["POST"])
+def vazamento_start():
+    email = request.form.get("email", "").strip()
     if not email:
-        return jsonify({"error": "E-mail não informado"}), 400
-
+        return jsonify({"ok": False, "error": "Email não informado"}), 400
     task_id = str(uuid.uuid4())
-    progress_file = os.path.join(PROGRESS_DIR, f"vazamento_{task_id}.txt")
-    result_file = os.path.join(RESULTS_DIR, f"vazamento_{task_id}.txt")
-
-    thread = threading.Thread(
-        target=run_tool,
-        args=(["python3", os.path.join(TOOLS_DIR, "leakcheck.py"), email],
-              progress_file, result_file)
-    )
-    thread.start()
-
-    return jsonify({"task_id": task_id})
+    _ensure_task(task_id, tool="vazamento")
+    threading.Thread(
+        target=_run_vazamento_task, args=(task_id, email), daemon=True
+    ).start()
+    return jsonify({"ok": True, "task_id": task_id})
 
 
-@app.route("/vazamento_progress/<task_id>")
-def vazamento_progress(task_id):
-    progress_file = os.path.join(PROGRESS_DIR, f"vazamento_{task_id}.txt")
-    result_file = os.path.join(RESULTS_DIR, f"vazamento_{task_id}.txt")
-
-    def generate():
-        while True:
-            progress = "0"
-            if os.path.exists(progress_file):
-                with open(progress_file) as f:
-                    progress = f.read().strip()
-
-            yield f"data: {json.dumps({'progress': progress})}\n\n"
-
-            if progress == "100" and os.path.exists(result_file):
-                with open(result_file, encoding="utf-8") as f:
-                    result = f.read()
-                yield f"data: {json.dumps({'progress': 100, 'result': result})}\n\n"
-                break
-            time.sleep(1)
-
-    return Response(generate(), mimetype="text/event-stream")
-
-
-# ----------------- METAWEB -----------------
-@app.route("/start_metaweb", methods=["POST"])
-def start_metaweb():
-    if "file" not in request.files:
-        return jsonify({"error": "Arquivo não enviado"}), 400
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"error": "Nome de arquivo inválido"}), 400
-
+@app.route("/metaweb/start", methods=["POST"])
+def metaweb_start():
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"ok": False, "error": "Arquivo não enviado"}), 400
+    uid = str(uuid.uuid4())
+    safe_name = f"{uid}__{os.path.basename(file.filename)}"
+    save_path = os.path.join(UPLOAD_DIR, safe_name)
+    file.save(save_path)
     task_id = str(uuid.uuid4())
-    upload_path = os.path.join(UPLOADS_DIR, f"{task_id}_{file.filename}")
-    file.save(upload_path)
-
-    progress_file = os.path.join(PROGRESS_DIR, f"metaweb_{task_id}.txt")
-    result_file = os.path.join(RESULTS_DIR, f"metaweb_{task_id}.txt")
-
-    thread = threading.Thread(
-        target=run_tool,
-        args=(["python3", os.path.join(TOOLS_DIR, "metaweb.py"), upload_path],
-              progress_file, result_file)
-    )
-    thread.start()
-
-    return jsonify({"task_id": task_id})
+    _ensure_task(task_id, tool="metaweb")
+    threading.Thread(
+        target=_run_metaweb_task, args=(task_id, save_path), daemon=True
+    ).start()
+    return jsonify({"ok": True, "task_id": task_id})
 
 
-@app.route("/metaweb_progress/<task_id>")
-def metaweb_progress(task_id):
-    progress_file = os.path.join(PROGRESS_DIR, f"metaweb_{task_id}.txt")
-    result_file = os.path.join(RESULTS_DIR, f"metaweb_{task_id}.txt")
-
-    def generate():
-        while True:
-            progress = "0"
-            if os.path.exists(progress_file):
-                with open(progress_file) as f:
-                    progress = f.read().strip()
-
-            yield f"data: {json.dumps({'progress': progress})}\n\n"
-
-            if progress == "100" and os.path.exists(result_file):
-                with open(result_file, encoding="utf-8") as f:
-                    result = f.read()
-                yield f"data: {json.dumps({'progress': 100, 'result': result})}\n\n"
-                break
-            time.sleep(1)
-
-    return Response(generate(), mimetype="text/event-stream")
+@app.route("/sherlock/start", methods=["POST"])
+def sherlock_start():
+    username = request.form.get("username", "").strip()
+    include_nsfw = bool(request.form.get("nsfw"))
+    if not username:
+        return jsonify({"ok": False, "error": "Nome de usuário não informado"}), 400
+    task_id = str(uuid.uuid4())
+    _ensure_task(task_id, tool="sherlock")
+    threading.Thread(
+        target=_run_sherlock_task, args=(task_id, username, include_nsfw), daemon=True
+    ).start()
+    return jsonify({"ok": True, "task_id": task_id})
 
 
-# ----------------- RELATÓRIOS -----------------
-@app.route("/relatorio/<data>/<arquivo>")
-def mostrar_relatorio(data, arquivo):
-    caminho = os.path.join("static", "relatorios", data, arquivo)
-    if not os.path.exists(caminho):
-        return "Relatório não encontrado", 404
-
-    with open(caminho, "r", encoding="utf-8") as f:
-        conteudo = f.read()
-
-    return render_template("relatorio.html", conteudo=conteudo, arquivo=arquivo)
+# ========== SSE ==========
+@app.route("/sse/vazamento/<task_id>")
+def sse_vazamento_named(task_id):
+    return Response(_sse_stream_named(task_id), mimetype="text/event-stream")
 
 
-# ==============================================
-# ROTAS DE RESULTADOS COM TEMPLATES
-# ==============================================
-
-@app.route('/sherlock_results/<task_id>')
-def sherlock_results(task_id):
-    result_file = os.path.join(RESULTS_DIR, f"sherlock_{task_id}.txt")
-    if not os.path.exists(result_file):
-        return "Resultado não encontrado", 404
-    with open(result_file, encoding="utf-8") as f:
-        result = f.read()
-    return render_template('_results.html', task={'id': task_id, 'result': result})
-
-@app.route('/vazamento_results/<task_id>')
-def vazamento_results(task_id):
-    result_file = os.path.join(RESULTS_DIR, f"vazamento_{task_id}.txt")
-    if not os.path.exists(result_file):
-        return "Resultado não encontrado", 404
-    with open(result_file, encoding="utf-8") as f:
-        result = f.read()
-    return render_template('_results.html', task={'id': task_id, 'result': result})
-
-@app.route('/metaweb_results/<task_id>')
-def metaweb_results(task_id):
-    result_file = os.path.join(RESULTS_DIR, f"metaweb_{task_id}.txt")
-    if not os.path.exists(result_file):
-        return "Resultado não encontrado", 404
-    with open(result_file, encoding="utf-8") as f:
-        result = f.read()
-    return render_template('_results.html', task={'id': task_id, 'result': result})
-
-# ==============================================
-# ROTAS DE PROGRESSO COM TEMPLATES
-# ==============================================
-
-@app.route('/sherlock_progress_template/<task_id>')
-def sherlock_progress_template(task_id):
-    progress_file = os.path.join(PROGRESS_DIR, f"sherlock_{task_id}.txt")
-    if not os.path.exists(progress_file):
-        return "Progresso não encontrado", 404
-    with open(progress_file) as f:
-        progress = f.read().strip()
-    return render_template('_progress.html', task={'id': task_id, 'progress': progress})
-
-@app.route('/vazamento_progress_template/<task_id>')
-def vazamento_progress_template(task_id):
-    progress_file = os.path.join(PROGRESS_DIR, f"vazamento_{task_id}.txt")
-    if not os.path.exists(progress_file):
-        return "Progresso não encontrado", 404
-    with open(progress_file) as f:
-        progress = f.read().strip()
-    return render_template('_progress.html', task={'id': task_id, 'progress': progress})
-
-@app.route('/metaweb_progress_template/<task_id>')
-def metaweb_progress_template(task_id):
-    progress_file = os.path.join(PROGRESS_DIR, f"metaweb_{task_id}.txt")
-    if not os.path.exists(progress_file):
-        return "Progresso não encontrado", 404
-    with open(progress_file) as f:
-        progress = f.read().strip()
-    return render_template('_progress.html', task={'id': task_id, 'progress': progress})
+@app.route("/sse/metaweb/<task_id>")
+def sse_metaweb_named(task_id):
+    return Response(_sse_stream_named(task_id), mimetype="text/event-stream")
 
 
+@app.route("/sse/sherlock/<task_id>")
+def sse_sherlock(task_id):
+    return Response(_sse_stream_named(task_id), mimetype="text/event-stream")
+
+
+# ========== IMPLEMENTAÇÕES DAS TASKS ==========
+def _run_vazamento_task(task_id: str, email: str):
+    _push_event(task_id, "progress", {"percent": 1, "message": "Iniciando verificação..."})
+    script = os.path.join(TOOLS_DIR, "email_leak_checker_full.sh")
+    if not os.path.exists(script):
+        _push_event(task_id, "error", {"message": "Script de vazamento não encontrado"})
+        return
+
+    try:
+        proc = subprocess.Popen(
+            ["/bin/bash", script, email],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        while proc.poll() is None:
+            time.sleep(0.5)
+        proc.wait()
+
+        rel_json = os.path.join(BASE_DIR, "leak_check_results", "ultimo_relatorio.json")
+        dados = {}
+        if os.path.exists(rel_json):
+            with open(rel_json, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+
+        _push_event(task_id, "payload", {"dados": dados, "resumo": f"Verificação concluída para {email}"})
+        _push_event(task_id, "complete", {"ok": True})
+    except Exception as e:
+        _push_event(task_id, "error", {"message": str(e)})
+
+
+def _run_metaweb_task(task_id: str, filepath: str):
+    resultado = {}
+    etapas = [
+        ("file", ["file", filepath]),
+        ("exiftool", ["exiftool", filepath]),
+        ("strings", ["strings", "-n", "8", filepath]),
+        ("md5sum", ["md5sum", filepath]),
+        ("sha256sum", ["sha256sum", filepath])
+    ]
+    for nome, cmd in etapas:
+        try:
+            resultado[nome] = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True).strip()
+        except Exception as e:
+            resultado[nome] = f"Erro: {e}"
+
+    _push_event(task_id, "payload", {"resultado": resultado})
+    _push_event(task_id, "complete", {"ok": True})
+
+
+def _run_sherlock_task(task_id: str, username: str, include_nsfw: bool):
+    """
+    Agora usando o runner (tools/sherlock_runner.py), que gera HTMLs e JSON.
+    """
+    _push_event(task_id, "progress", {"percent": 1, "message": "Executando Sherlock..."})
+
+    py = sys.executable or "python3"
+    runner = os.path.join(TOOLS_DIR, "sherlock_runner.py")
+    cmd = [py, runner, username]
+    if include_nsfw:
+        cmd.append("--nsfw")
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=TOOLS_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        proc.wait()
+
+        rel_json = os.path.join(BASE_DIR, "leak_check_results", "ultimo_relatorio_sherlock.json")
+        dados = {}
+        if os.path.exists(rel_json):
+            with open(rel_json, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+
+        _push_event(task_id, "payload", {"dados": dados, "resumo": f"Sherlock concluído para {username}"})
+        _push_event(task_id, "complete", {"ok": True})
+    except Exception as e:
+        _push_event(task_id, "error", {"message": f"Erro ao rodar Sherlock: {e}"})
+
+
+# ========== MAIN ==========
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5050))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=5050, debug=False)
