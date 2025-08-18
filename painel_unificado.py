@@ -8,20 +8,20 @@ import shutil
 import threading
 import subprocess
 from flask import (
-    Flask, render_template, request, jsonify, Response, redirect, url_for
+    Flask, render_template, request, jsonify, Response
 )
 
 app = Flask(__name__)
 
 # --- Pastas base ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 TOOLS_DIR = os.path.join(BASE_DIR, "tools")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 RESULTS_DIR = os.path.join(BASE_DIR, "results")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
+LEAK_RESULTS_DIR = os.path.join(BASE_DIR, "leak_check_results")
 
-for d in (UPLOAD_DIR, RESULTS_DIR):
+for d in (UPLOAD_DIR, RESULTS_DIR, LEAK_RESULTS_DIR):
     os.makedirs(d, exist_ok=True)
 
 # --- Infra simples de SSE em memória ---
@@ -65,7 +65,6 @@ def _sse_stream_named(task_id: str):
 
         if etype in ("complete", "error"):
             break
-
 
 # ========== ROTAS BÁSICAS ==========
 @app.route("/")
@@ -173,7 +172,7 @@ def _run_vazamento_task(task_id: str, email: str):
             time.sleep(0.5)
         proc.wait()
 
-        rel_json = os.path.join(BASE_DIR, "leak_check_results", "ultimo_relatorio.json")
+        rel_json = os.path.join(LEAK_RESULTS_DIR, "ultimo_relatorio.json")
         dados = {}
         if os.path.exists(rel_json):
             with open(rel_json, "r", encoding="utf-8") as f:
@@ -205,9 +204,6 @@ def _run_metaweb_task(task_id: str, filepath: str):
 
 
 def _run_sherlock_task(task_id: str, username: str, include_nsfw: bool):
-    """
-    Agora usando o runner (tools/sherlock_runner.py), que gera HTMLs e JSON.
-    """
     _push_event(task_id, "progress", {"percent": 1, "message": "Executando Sherlock..."})
 
     py = sys.executable or "python3"
@@ -226,7 +222,7 @@ def _run_sherlock_task(task_id: str, username: str, include_nsfw: bool):
         )
         proc.wait()
 
-        rel_json = os.path.join(BASE_DIR, "leak_check_results", "ultimo_relatorio_sherlock.json")
+        rel_json = os.path.join(LEAK_RESULTS_DIR, "ultimo_relatorio_sherlock.json")
         dados = {}
         if os.path.exists(rel_json):
             with open(rel_json, "r", encoding="utf-8") as f:
