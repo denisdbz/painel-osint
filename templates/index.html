@@ -3,13 +3,8 @@
     <h2>Bem-vindo ao Painel OSINT</h2>
     <p>Escolha uma das ferramentas abaixo:</p>      
     <div class="cards">
-        <!-- Atualizado para rota correta /vazamento -->
         <a href="{{ url_for('vazamento') }}" class="card">📧 Verificar Vazamento de E-mail</a>
-
-        <!-- Rota já existente -->
         <a href="{{ url_for('metaweb') }}" class="card">📂 Análise de Metadados (MetaWeb)</a>
-
-        <!-- Atualizado para rota correta /sherlock -->
         <a href="{{ url_for('sherlock') }}" class="card">🕵 Busca de Usuário (Sherlock)</a>
     </div>
 {% endblock %}

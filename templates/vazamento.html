@@ -29,6 +29,15 @@
 </div>
 
 <script>
+function startVazamentoProgress(taskId, callback) {
+    const evtSource = new EventSource(`{{ url_for('sse_vazamento', task_id='') }}${taskId}`);
+    evtSource.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+        callback(payload);
+        if (payload.progress === "100") evtSource.close();
+    };
+}
+
 document.getElementById('vazamento-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     const email = document.getElementById('email').value;
@@ -41,7 +50,7 @@ document.getElementById('vazamento-form').addEventListener('submit', async funct
     document.getElementById('vazamento-output').innerHTML = '';
 
     // inicia task
-    const res = await fetch('/start_vazamento', {
+    const res = await fetch("{{ url_for('vazamento_start') }}", {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ email })
