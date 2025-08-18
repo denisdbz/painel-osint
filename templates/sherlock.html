@@ -3,7 +3,7 @@
 <h2>Busca de Usuário (Sherlock)</h2>
 
 <form id="sherlock-form">
-    <input type="text" name="username" placeholder="Digite o usuário" required>
+    <input type="text" name="username" placeholder="Digite o nome de usuário" required>
     <button type="submit">Buscar</button>
 </form>
 
@@ -12,20 +12,15 @@
 <script>
 document.getElementById('sherlock-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const form = e.target;
-    const fd = new FormData(form);
+    const fd = new FormData(e.target);
 
     const resp = await fetch("{{ url_for('start_sherlock') }}", { method: 'POST', body: fd });
     const data = await resp.json();
     if (data.error) { alert(data.error); return; }
 
     const resultado = document.getElementById('resultado');
-
-    // Aqui usamos a função global já definida em base.html
     window.startSherlockProgress(data.task_id, (payload) => {
-        if (payload.result) {
-            resultado.textContent = payload.result;
-        }
+        if (payload.result) resultado.textContent = payload.result;
     });
 });
 </script>

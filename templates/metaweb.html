@@ -12,20 +12,15 @@
 <script>
 document.getElementById('metaweb-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const form = e.target;
-    const fd = new FormData(form);
+    const fd = new FormData(e.target);
 
     const resp = await fetch("{{ url_for('start_metaweb') }}", { method: 'POST', body: fd });
     const data = await resp.json();
     if (data.error) { alert(data.error); return; }
 
     const resultado = document.getElementById('resultado');
-
-    // Aqui usamos a função global já definida em base.html
     window.startMetawebProgress(data.task_id, (payload) => {
-        if (payload.result) {
-            resultado.textContent = payload.result;
-        }
+        if (payload.result) resultado.textContent = payload.result;
     });
 });
 </script>

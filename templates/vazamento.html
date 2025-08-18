@@ -1,39 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Verificação de Vazamento de E-mail</h2>
+<h2>Verificar Vazamento de E-mail</h2>
 
 <form id="vazamento-form">
     <input type="email" name="email" placeholder="Digite o e-mail" required>
-    <button type="submit">Iniciar Verificação</button>
+    <button type="submit">Verificar</button>
 </form>
 
-<div id="progress-container" style="display:none;">
-    <p>Progresso: <span id="progress">0</span>%</p>
-    <pre id="resultado"></pre>
-</div>
+<pre id="resultado"></pre>
 
 <script>
 document.getElementById('vazamento-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const form = e.target;
-    const fd = new FormData(form);
+    const fd = new FormData(e.target);
 
     const resp = await fetch("{{ url_for('start_vazamento') }}", { method: 'POST', body: fd });
     const data = await resp.json();
     if (data.error) { alert(data.error); return; }
 
-    const taskId = data.task_id;
-    document.getElementById('progress-container').style.display = 'block';
     const resultado = document.getElementById('resultado');
-    const progressEl = document.getElementById('progress');
-
-    const evtSource = new EventSource(`{{ url_for('vazamento_progress', task_id='') }}${taskId}`);
-    evtSource.onmessage = (event) => {
-        const json = JSON.parse(event.data);
-        progressEl.textContent = json.progress;
-        if (json.result) resultado.textContent = json.result;
-        if (json.progress === "100") evtSource.close();
-    };
+    window.startVazamentoProgress(data.task_id, (payload) => {
+        if (payload.result) resultado.textContent = payload.result;
+    });
 });
 </script>
 {% endblock %}

@@ -82,16 +82,6 @@
             if (sub) sub.textContent = msg;
         }
 
-        document.querySelectorAll("form").forEach(form => {
-            form.addEventListener("submit", showLoader);
-        });
-
-        const originalFetch = window.fetch;
-        window.fetch = function(...args) {
-            showLoader();
-            return originalFetch(...args).finally(hideLoader);
-        };
-
         function setupProgressEventSource(url, onComplete) {
             showLoader();
             setLoaderProgress(1, "Iniciando...");
@@ -126,15 +116,15 @@
             return es;
         }
 
-window.startSherlockProgress = (taskId, onComplete) =>
-    setupProgressEventSource(`/sherlock_progress/${taskId}`, onComplete);
+        // Padrões para cada ferramenta
+        window.startSherlockProgress = (taskId, onComplete) =>
+            setupProgressEventSource(`/sherlock_progress/${taskId}`, onComplete);
 
-window.startVazamentoProgress = (taskId, onComplete) =>
-    setupProgressEventSource(`/vazamento_progress/${taskId}`, onComplete);
+        window.startVazamentoProgress = (taskId, onComplete) =>
+            setupProgressEventSource(`/vazamento_progress/${taskId}`, onComplete);
 
-window.startMetawebProgress = (taskId, onComplete) =>
-    setupProgressEventSource(`/metaweb_progress/${taskId}`, onComplete);
-
+        window.startMetawebProgress = (taskId, onComplete) =>
+            setupProgressEventSource(`/metaweb_progress/${taskId}`, onComplete);
     </script>
 </body>
 </html>
