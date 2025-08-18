@@ -12,9 +12,8 @@
 <script>
 document.getElementById('sherlock-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const fd = new FormData(e.target);
-
-    const resp = await fetch("{{ url_for('start_sherlock') }}", { method: 'POST', body: fd });
+    const fd = new FormData(e.target);              
+    const resp = await fetch("{{ url_for('sherlock_start') }}", { method: 'POST', body: fd });
     const data = await resp.json();
     if (data.error) { alert(data.error); return; }
 
