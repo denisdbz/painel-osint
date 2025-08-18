@@ -7,10 +7,7 @@
     <button type="submit">Iniciar Análise</button>
 </form>
 
-<div id="progress-container" style="display:none;">
-    <p>Progresso: <span id="progress">0</span>%</p>
-    <pre id="resultado"></pre>
-</div>
+<pre id="resultado"></pre>
 
 <script>
 document.getElementById('metaweb-form').addEventListener('submit', async (e) => {
@@ -20,20 +17,16 @@ document.getElementById('metaweb-form').addEventListener('submit', async (e) => 
 
     const resp = await fetch("{{ url_for('start_metaweb') }}", { method: 'POST', body: fd });
     const data = await resp.json();
-    if(data.error) { alert(data.error); return; }
+    if (data.error) { alert(data.error); return; }
 
-    const taskId = data.task_id;
-    document.getElementById('progress-container').style.display = 'block';
     const resultado = document.getElementById('resultado');
-    const progressEl = document.getElementById('progress');
 
-    const evtSource = new EventSource(`/metaweb_progress/${taskId}`);
-    evtSource.onmessage = (event) => {
-        const json = JSON.parse(event.data);
-        progressEl.textContent = json.progress;
-        if(json.result) resultado.textContent = json.result;
-        if(json.progress === 100 || json.progress === "100") evtSource.close();
-    };
+    // Aqui usamos a função global já definida em base.html
+    window.startMetawebProgress(data.task_id, (payload) => {
+        if (payload.result) {
+            resultado.textContent = payload.result;
+        }
+    });
 });
 </script>
 {% endblock %}

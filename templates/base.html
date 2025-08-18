@@ -126,14 +126,15 @@
             return es;
         }
 
-        window.startSherlockProgress = (taskId, onComplete) =>
-            setupProgressEventSource(`/sse/sherlock/${taskId}`, onComplete);
+window.startSherlockProgress = (taskId, onComplete) =>
+    setupProgressEventSource(`/sherlock_progress/${taskId}`, onComplete);
 
-        window.startVazamentoProgress = (taskId, onComplete) =>
-            setupProgressEventSource(`/sse/vazamento/${taskId}`, onComplete);
+window.startVazamentoProgress = (taskId, onComplete) =>
+    setupProgressEventSource(`/vazamento_progress/${taskId}`, onComplete);
 
-        window.startMetawebProgress = (taskId, onComplete) =>
-            setupProgressEventSource(`/sse/metaweb/${taskId}`, onComplete);
+window.startMetawebProgress = (taskId, onComplete) =>
+    setupProgressEventSource(`/metaweb_progress/${taskId}`, onComplete);
+
     </script>
 </body>
 </html>

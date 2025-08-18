@@ -4,13 +4,10 @@
 
 <form id="sherlock-form">
     <input type="text" name="username" placeholder="Digite o usuário" required>
-    <button type="submit">Iniciar Busca</button>
+    <button type="submit">Buscar</button>
 </form>
 
-<div id="progress-container" style="display:none;">
-    <p>Progresso: <span id="progress">0</span>%</p>
-    <pre id="resultado"></pre>
-</div>
+<pre id="resultado"></pre>
 
 <script>
 document.getElementById('sherlock-form').addEventListener('submit', async (e) => {
@@ -18,22 +15,18 @@ document.getElementById('sherlock-form').addEventListener('submit', async (e) =>
     const form = e.target;
     const fd = new FormData(form);
 
-    const resp = await fetch("{{ url_for('sherlock_start') }}", { method: 'POST', body: fd });
+    const resp = await fetch("{{ url_for('start_sherlock') }}", { method: 'POST', body: fd });
     const data = await resp.json();
     if (data.error) { alert(data.error); return; }
 
-    const taskId = data.task_id;
-    document.getElementById('progress-container').style.display = 'block';
     const resultado = document.getElementById('resultado');
-    const progressEl = document.getElementById('progress');
 
-    const evtSource = new EventSource(`{{ url_for('sherlock_progress', task_id='') }}${taskId}`);
-    evtSource.onmessage = (event) => {
-        const json = JSON.parse(event.data);
-        progressEl.textContent = json.progress;
-        if (json.result) resultado.textContent = json.result;
-        if (json.progress === "100") evtSource.close();
-    };
+    // Aqui usamos a função global já definida em base.html
+    window.startSherlockProgress(data.task_id, (payload) => {
+        if (payload.result) {
+            resultado.textContent = payload.result;
+        }
+    });
 });
 </script>
 {% endblock %}
