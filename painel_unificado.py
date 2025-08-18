@@ -9,6 +9,9 @@ import subprocess
 from flask import Flask, render_template, request, jsonify, Response
 from flask_cors import CORS  # <<< ADICIONADO
 
+# ==============================
+# Configuração do Flask
+# ==============================
 app = Flask(__name__)
 CORS(app)  # <<< ADICIONADO
 
@@ -21,7 +24,9 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 for d in (UPLOAD_DIR, RESULTS_DIR):
     os.makedirs(d, exist_ok=True)
 
-# --- Infra simples de SSE em memória ---
+# ==============================
+# Infra simples de SSE em memória
+# ==============================
 TASK_COND = {}
 TASK_QUEUE = {}
 TASK_TOOL = {}  # task_id -> "vazamento" | "metaweb" | "sherlock"
@@ -60,7 +65,9 @@ def _sse_stream_named(task_id: str):
         if etype in ("complete", "error"):
             break
 
-# ========= Função de links de busca =========
+# ==============================
+# Função de links de busca
+# ==============================
 def montar_links_busca(email: str):
     email_q = f'"{email}"'  # busca exata
     return {
@@ -76,7 +83,9 @@ def montar_links_busca(email: str):
         "LinkedIn": f"https://www.linkedin.com/search/results/all/?keywords={email_q}"
     }
 
-# ========= Filtro para limpar resultados inúteis =========
+# ==============================
+# Filtro para limpar resultados inúteis
+# ==============================
 def filtrar_resultados(links, email):
     extensoes_ruins = [".js", ".css", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".woff", ".ico"]
     vistos = set()
@@ -91,7 +100,9 @@ def filtrar_resultados(links, email):
         filtrados[nome] = url
     return filtrados
 
-# ========== ROTAS BÁSICAS ==========
+# ==============================
+# Rotas básicas
+# ==============================
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -112,7 +123,9 @@ def sherlock_search():
 def ajuda():
     return render_template("ajuda.html")
 
-# ========== START ==========
+# ==============================
+# Start das Tasks
+# ==============================
 @app.route("/start_vazamento", methods=["POST"])
 def vazamento_start():
     email = request.form.get("email", "").strip()
@@ -154,7 +167,9 @@ def sherlock_start():
     ).start()
     return jsonify({"ok": True, "task_id": task_id})
 
-# ========== SSE ==========
+# ==============================
+# SSE
+# ==============================
 @app.route("/sse/vazamento/<task_id>")
 def sse_vazamento_named(task_id):
     return Response(_sse_stream_named(task_id), mimetype="text/event-stream")
@@ -167,7 +182,9 @@ def sse_metaweb_named(task_id):
 def sse_sherlock(task_id):
     return Response(_sse_stream_named(task_id), mimetype="text/event-stream")
 
-# ========== RESULTADOS ==========
+# ==============================
+# Resultados Sherlock
+# ==============================
 @app.route("/sherlock/result/<task_id>")
 def sherlock_result(task_id):
     rel_json = os.path.join(BASE_DIR, "leak_check_results", "ultimo_relatorio_sherlock.json")
@@ -199,7 +216,9 @@ def sherlock_result(task_id):
         stderr=stderr
     )
 
-# ========== IMPLEMENTAÇÕES DAS TASKS ==========
+# ==============================
+# Implementação das Tasks
+# ==============================
 def _run_vazamento_task(task_id: str, email: str):
     _push_event(task_id, "progress", {"percent": 1, "message": "Iniciando verificação..."})
     script = os.path.join(TOOLS_DIR, "email_leak_checker_full.sh")
@@ -215,7 +234,6 @@ def _run_vazamento_task(task_id: str, email: str):
             text=True
         )
 
-        # ✅ leitura assíncrona até finalizar
         while True:
             ret = proc.poll()
             if ret is not None:
@@ -276,7 +294,6 @@ def _run_sherlock_task(task_id: str, username: str, include_nsfw: bool):
             text=True
         )
 
-        # ✅ espera não bloqueante
         while True:
             ret = proc.poll()
             if ret is not None:
@@ -294,7 +311,9 @@ def _run_sherlock_task(task_id: str, username: str, include_nsfw: bool):
     except Exception as e:
         _push_event(task_id, "error", {"message": f"Erro ao rodar Sherlock: {e}"})
 
-# ========== MAIN ==========
+# ==============================
+# Main
+# ==============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5050))
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
