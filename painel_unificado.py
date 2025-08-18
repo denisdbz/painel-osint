@@ -182,7 +182,6 @@ def start_metaweb():
     progress_file = os.path.join(PROGRESS_DIR, f"metaweb_{task_id}.txt")
     result_file = os.path.join(RESULTS_DIR, f"metaweb_{task_id}.txt")
 
-    # roda o script metaweb.py
     thread = threading.Thread(
         target=run_tool,
         args=(["python3", os.path.join(TOOLS_DIR, "metaweb.py"), upload_path],
@@ -228,6 +227,69 @@ def mostrar_relatorio(data, arquivo):
         conteudo = f.read()
 
     return render_template("relatorio.html", conteudo=conteudo, arquivo=arquivo)
+
+
+# ==============================================
+# ROTAS DE RESULTADOS COM TEMPLATES
+# ==============================================
+
+@app.route('/sherlock_results/<task_id>')
+def sherlock_results(task_id):
+    result_file = os.path.join(RESULTS_DIR, f"sherlock_{task_id}.txt")
+    if not os.path.exists(result_file):
+        return "Resultado não encontrado", 404
+    with open(result_file, encoding="utf-8") as f:
+        result = f.read()
+    return render_template('_results.html', task={'id': task_id, 'result': result})
+
+@app.route('/vazamento_results/<task_id>')
+def vazamento_results(task_id):
+    result_file = os.path.join(RESULTS_DIR, f"vazamento_{task_id}.txt")
+    if not os.path.exists(result_file):
+        return "Resultado não encontrado", 404
+    with open(result_file, encoding="utf-8") as f:
+        result = f.read()
+    return render_template('_results.html', task={'id': task_id, 'result': result})
+
+@app.route('/metaweb_results/<task_id>')
+def metaweb_results(task_id):
+    result_file = os.path.join(RESULTS_DIR, f"metaweb_{task_id}.txt")
+    if not os.path.exists(result_file):
+        return "Resultado não encontrado", 404
+    with open(result_file, encoding="utf-8") as f:
+        result = f.read()
+    return render_template('_results.html', task={'id': task_id, 'result': result})
+
+# ==============================================
+# ROTAS DE PROGRESSO COM TEMPLATES
+# ==============================================
+
+@app.route('/sherlock_progress_template/<task_id>')
+def sherlock_progress_template(task_id):
+    progress_file = os.path.join(PROGRESS_DIR, f"sherlock_{task_id}.txt")
+    if not os.path.exists(progress_file):
+        return "Progresso não encontrado", 404
+    with open(progress_file) as f:
+        progress = f.read().strip()
+    return render_template('_progress.html', task={'id': task_id, 'progress': progress})
+
+@app.route('/vazamento_progress_template/<task_id>')
+def vazamento_progress_template(task_id):
+    progress_file = os.path.join(PROGRESS_DIR, f"vazamento_{task_id}.txt")
+    if not os.path.exists(progress_file):
+        return "Progresso não encontrado", 404
+    with open(progress_file) as f:
+        progress = f.read().strip()
+    return render_template('_progress.html', task={'id': task_id, 'progress': progress})
+
+@app.route('/metaweb_progress_template/<task_id>')
+def metaweb_progress_template(task_id):
+    progress_file = os.path.join(PROGRESS_DIR, f"metaweb_{task_id}.txt")
+    if not os.path.exists(progress_file):
+        return "Progresso não encontrado", 404
+    with open(progress_file) as f:
+        progress = f.read().strip()
+    return render_template('_progress.html', task={'id': task_id, 'progress': progress})
 
 
 if __name__ == "__main__":

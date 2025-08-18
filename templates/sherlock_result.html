@@ -1,30 +1,17 @@
-{% extends "base.html" %}
-{% block content %}
-<h2>Resultados do Sherlock</h2>
-<p><b>Usuário verificado:</b> {{ username }}</p>
-
-<div class="cards-container">
-    {% for site, r in resultados.items() %}
-    <div class="card success">
-        <div class="card-header">
-            <span class="status-dot green"></span>
-            <h3>{{ site }}</h3>
-        </div>
-        <p>
-            Perfil encontrado:<br>
-            <a href="{{ r.link }}" target="_blank">{{ r.link }}</a>
-        </p>
-        <a class="btn" href="{{ r.arquivo }}" target="_blank">📄 Relatório HTML</a>
-    </div>
-    {% endfor %}
-</div>
-
-{% if stderr %}
-<div class="resultado-fonte">
-    <h4>--- STDERR ---</h4>
-    <pre>{{ stderr }}</pre>
-</div>
-{% endif %}
-
-<a href="{{ url_for('sherlock_search') }}" class="btn-secondary">🔄 Nova busca</a>
-{% endblock %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Sherlock - Resultados</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<h2>Sherlock - Resultados</h2>
+<ul>
+{% for item in results %}
+<li>{{ item }}</li>
+{% endfor %}
+</ul>
+<a href="/sherlock">Voltar</a>
+</body>
+</html>
