@@ -6,9 +6,7 @@ import time
 import shutil
 import threading
 import subprocess
-from flask import (
-    Flask, render_template, request, jsonify, Response
-)
+from flask import Flask, render_template, request, jsonify, Response
 from flask_cors import CORS  # <<< ADICIONADO
 
 app = Flask(__name__)
@@ -28,7 +26,6 @@ TASK_COND = {}
 TASK_QUEUE = {}
 TASK_TOOL = {}  # task_id -> "vazamento" | "metaweb" | "sherlock"
 
-
 def _ensure_task(task_id: str, tool: str = None):
     if task_id not in TASK_COND:
         TASK_COND[task_id] = threading.Condition()
@@ -36,14 +33,12 @@ def _ensure_task(task_id: str, tool: str = None):
     if tool:
         TASK_TOOL[task_id] = tool
 
-
 def _push_event(task_id: str, etype: str, payload: dict):
     _ensure_task(task_id)
     cond = TASK_COND[task_id]
     with cond:
         TASK_QUEUE[task_id].append((etype, payload))
         cond.notify_all()
-
 
 def _sse_stream_named(task_id: str):
     _ensure_task(task_id)
@@ -65,11 +60,9 @@ def _sse_stream_named(task_id: str):
         if etype in ("complete", "error"):
             break
 
-
 # ========= Função de links de busca =========
 def montar_links_busca(email: str):
     email_q = f'"{email}"'  # busca exata
-
     return {
         "Google": f"https://www.google.com/search?q={email_q}",
         "Bing": f"https://www.bing.com/search?q={email_q}",
@@ -82,7 +75,6 @@ def montar_links_busca(email: str):
         "Reddit": f"https://www.reddit.com/search/?q={email_q}",
         "LinkedIn": f"https://www.linkedin.com/search/results/all/?keywords={email_q}"
     }
-
 
 # ========= Filtro para limpar resultados inúteis =========
 def filtrar_resultados(links, email):
@@ -99,36 +91,31 @@ def filtrar_resultados(links, email):
         filtrados[nome] = url
     return filtrados
 
-
 # ========== ROTAS BÁSICAS ==========
 @app.route("/")
 def index():
     return render_template("index.html")
 
-
 @app.route("/vazamento", methods=["GET"])
 def email_leak():
     return render_template("vazamento.html")
-
 
 @app.route("/metaweb", methods=["GET"])
 def metaweb():
     return render_template("metaweb.html")
 
-
 @app.route("/sherlock", methods=["GET"])
 def sherlock_search():
     return render_template("sherlock.html")
-
 
 @app.route("/ajuda", methods=["GET"])
 def ajuda():
     return render_template("ajuda.html")
 
-
 # ========== START ==========
 @app.route("/start_vazamento", methods=["POST"])
-def vazamento_start():    email = request.form.get("email", "").strip()
+def vazamento_start():
+    email = request.form.get("email", "").strip()
     if not email:
         return jsonify({"ok": False, "error": "Email não informado"}), 400
     task_id = str(uuid.uuid4())
@@ -137,7 +124,6 @@ def vazamento_start():    email = request.form.get("email", "").strip()
         target=_run_vazamento_task, args=(task_id, email), daemon=True
     ).start()
     return jsonify({"ok": True, "task_id": task_id})
-
 
 @app.route("/metaweb/start", methods=["POST"])
 def metaweb_start():
@@ -155,7 +141,6 @@ def metaweb_start():
     ).start()
     return jsonify({"ok": True, "task_id": task_id})
 
-
 @app.route("/sherlock/start", methods=["POST"])
 def sherlock_start():
     username = request.form.get("username", "").strip()
@@ -169,22 +154,18 @@ def sherlock_start():
     ).start()
     return jsonify({"ok": True, "task_id": task_id})
 
-
 # ========== SSE ==========
 @app.route("/sse/vazamento/<task_id>")
 def sse_vazamento_named(task_id):
     return Response(_sse_stream_named(task_id), mimetype="text/event-stream")
 
-
 @app.route("/sse/metaweb/<task_id>")
 def sse_metaweb_named(task_id):
     return Response(_sse_stream_named(task_id), mimetype="text/event-stream")
 
-
 @app.route("/sse/sherlock/<task_id>")
 def sse_sherlock(task_id):
     return Response(_sse_stream_named(task_id), mimetype="text/event-stream")
-
 
 # ========== RESULTADOS ==========
 @app.route("/sherlock/result/<task_id>")
@@ -217,7 +198,6 @@ def sherlock_result(task_id):
         resultados=resultados,
         stderr=stderr
     )
-
 
 # ========== IMPLEMENTAÇÕES DAS TASKS ==========
 def _run_vazamento_task(task_id: str, email: str):
@@ -260,7 +240,6 @@ def _run_vazamento_task(task_id: str, email: str):
     except Exception as e:
         _push_event(task_id, "error", {"message": str(e)})
 
-
 def _run_metaweb_task(task_id: str, filepath: str):
     resultado = {}
     etapas = [
@@ -278,7 +257,6 @@ def _run_metaweb_task(task_id: str, filepath: str):
 
     _push_event(task_id, "payload", {"resultado": resultado})
     _push_event(task_id, "complete", {"ok": True})
-
 
 def _run_sherlock_task(task_id: str, username: str, include_nsfw: bool):
     _push_event(task_id, "progress", {"percent": 1, "message": "Executando Sherlock..."})
@@ -315,7 +293,6 @@ def _run_sherlock_task(task_id: str, username: str, include_nsfw: bool):
         _push_event(task_id, "complete", {"ok": True})
     except Exception as e:
         _push_event(task_id, "error", {"message": f"Erro ao rodar Sherlock: {e}"})
-
 
 # ========== MAIN ==========
 if __name__ == "__main__":
