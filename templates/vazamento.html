@@ -1,117 +1,39 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="painel">
-    <h2>📧 Vazamento de Dados</h2>
-    <p>Verifique se um e-mail aparece em relatórios de vazamento de dados públicos.</p>
+<h2>Verificação de Vazamento de E-mail</h2>
 
-    <!-- Formulário -->
-    <form id="vazamento-form">
-        <div class="campo">
-            <label for="email">Digite o e-mail:</label>
-            <input type="email" id="email" name="email" placeholder="exemplo@dominio.com" required>
-        </div>
-        <button type="submit" class="botao">🔍 Verificar</button>
-    </form>
+<form id="vazamento-form">
+    <input type="email" name="email" placeholder="Digite o e-mail" required>
+    <button type="submit">Iniciar Verificação</button>
+</form>
 
-    <!-- Progresso -->
-    <div id="vazamento-progress" class="progress-container" style="display:none;">
-        <p id="vazamento-status">⏳ Iniciando verificação...</p>
-        <div class="progress-bar">
-            <div id="vazamento-bar" class="progress"></div>
-        </div>
-    </div>
-
-    <!-- Resultado -->
-    <div id="vazamento-resultado" class="resultado" style="display:none;">
-        <h3>📊 Resultado</h3>
-        <div id="vazamento-output"></div>
-    </div>
+<div id="progress-container" style="display:none;">
+    <p>Progresso: <span id="progress">0</span>%</p>
+    <pre id="resultado"></pre>
 </div>
 
 <script>
-function startVazamentoProgress(taskId, callback) {
-    const evtSource = new EventSource(`{{ url_for('sse_vazamento', task_id='') }}${taskId}`);
-    evtSource.onmessage = (event) => {
-        const payload = JSON.parse(event.data);
-        callback(payload);
-        if (payload.progress === "100") evtSource.close();
-    };
-}
-
-document.getElementById('vazamento-form').addEventListener('submit', async function(e) {
+document.getElementById('vazamento-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('email').value;
+    const form = e.target;
+    const fd = new FormData(form);
 
-    // reset
-    document.getElementById('vazamento-progress').style.display = 'block';
-    document.getElementById('vazamento-status').textContent = '⏳ Iniciando verificação...';
-    document.getElementById('vazamento-bar').style.width = '0%';
-    document.getElementById('vazamento-resultado').style.display = 'none';
-    document.getElementById('vazamento-output').innerHTML = '';
+    const resp = await fetch("{{ url_for('vazamento_start') }}", { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (data.error) { alert(data.error); return; }
 
-    // inicia task
-    const res = await fetch("{{ url_for('vazamento_start') }}", {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ email })
-    });
-    const data = await res.json();
     const taskId = data.task_id;
+    document.getElementById('progress-container').style.display = 'block';
+    const resultado = document.getElementById('resultado');
+    const progressEl = document.getElementById('progress');
 
-    // progresso
-    startVazamentoProgress(taskId, (payload) => {
-        if (!payload) return;
-
-        // pega resultado do Celery
-        const resultado = payload.resultado || {};
-        const dados = resultado.dados || {};
-        const links = resultado.links || [];
-        const resumo = resultado.resumo || "";
-
-        let html = "";
-        if (resumo) {
-            html += `<p>${resumo}</p>`;
-        }
-
-        // Relatórios encontrados
-        if (dados.resultados) {
-            html += `<h4>📂 Relatórios encontrados:</h4><div class="fontes-grid">`;
-            for (let fonte in dados.resultados) {
-                const arquivo = dados.resultados[fonte];
-                html += `<a href="/relatorio/${dados.data}/${arquivo}" target="_blank" class="fonte-card">🔎 ${fonte}</a>`;
-            }
-            html += `</div>`;
-        }
-
-        // Links de busca
-        if (links.length > 0) {
-            html += `<h4>🌍 Links de busca:</h4><ul>`;
-            links.forEach(l => {
-                html += `<li><a href="${l.url}" target="_blank">${l.nome}</a></li>`;
-            });
-            html += `</ul>`;
-        }
-
-        document.getElementById('vazamento-output').innerHTML = html;
-        document.getElementById('vazamento-resultado').style.display = 'block';
-    });
+    const evtSource = new EventSource(`{{ url_for('vazamento_progress', task_id='') }}${taskId}`);
+    evtSource.onmessage = (event) => {
+        const json = JSON.parse(event.data);
+        progressEl.textContent = json.progress;
+        if (json.result) resultado.textContent = json.result;
+        if (json.progress === "100") evtSource.close();
+    };
 });
 </script>
-
-<style>
-#vazamento-output ul {
-    list-style: none;
-    padding-left: 0;
-}
-#vazamento-output ul li {
-    margin: 4px 0;
-}
-#vazamento-output ul li a {
-    color: #0078d4;
-    text-decoration: none;
-}
-#vazamento-output ul li a:hover {
-    text-decoration: underline;
-}
-</style>
 {% endblock %}

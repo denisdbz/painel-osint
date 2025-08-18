@@ -3,11 +3,10 @@ import sys
 import json
 import uuid
 import time
-import shutil
 import threading
 import subprocess
 from flask import (
-    Flask, render_template, request, jsonify, Response, send_from_directory
+    Flask, render_template, request, jsonify, Response
 )
 from flask_cors import CORS
 
@@ -15,7 +14,6 @@ app = Flask(__name__)
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 TOOLS_DIR = os.path.join(BASE_DIR, "tools")
 RESULTS_DIR = os.path.join(BASE_DIR, "results")
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
@@ -27,6 +25,7 @@ for d in [RESULTS_DIR, UPLOADS_DIR, PROGRESS_DIR, RELATORIOS_DIR]:
 
 
 def run_tool(command, progress_file, result_file):
+    """Executa ferramenta em subprocesso e grava progresso/resultados"""
     with open(progress_file, "w") as f:
         f.write("0")
 
@@ -45,7 +44,7 @@ def run_tool(command, progress_file, result_file):
             f.write(str(min(100, i)))
 
     process.wait()
-    with open(result_file, "w") as f:
+    with open(result_file, "w", encoding="utf-8") as f:
         f.write("\n".join(output_lines))
 
     with open(progress_file, "w") as f:
@@ -77,6 +76,7 @@ def metaweb():
     return render_template("metaweb.html")
 
 
+# ----------------- SHERLOCK -----------------
 @app.route("/start_sherlock", methods=["POST"])
 def start_sherlock():
     username = request.form.get("username")
@@ -104,25 +104,24 @@ def sherlock_progress(task_id):
 
     def generate():
         while True:
+            progress = "0"
             if os.path.exists(progress_file):
                 with open(progress_file) as f:
                     progress = f.read().strip()
-            else:
-                progress = "0"
 
             yield f"data: {json.dumps({'progress': progress})}\n\n"
 
             if progress == "100" and os.path.exists(result_file):
-                with open(result_file) as f:
+                with open(result_file, encoding="utf-8") as f:
                     result = f.read()
                 yield f"data: {json.dumps({'progress': 100, 'result': result})}\n\n"
                 break
-
             time.sleep(1)
 
     return Response(generate(), mimetype="text/event-stream")
 
 
+# ----------------- VAZAMENTO -----------------
 @app.route("/start_vazamento", methods=["POST"])
 def start_vazamento():
     email = request.form.get("email")
@@ -150,38 +149,43 @@ def vazamento_progress(task_id):
 
     def generate():
         while True:
+            progress = "0"
             if os.path.exists(progress_file):
                 with open(progress_file) as f:
                     progress = f.read().strip()
-            else:
-                progress = "0"
 
             yield f"data: {json.dumps({'progress': progress})}\n\n"
 
             if progress == "100" and os.path.exists(result_file):
-                with open(result_file) as f:
+                with open(result_file, encoding="utf-8") as f:
                     result = f.read()
                 yield f"data: {json.dumps({'progress': 100, 'result': result})}\n\n"
                 break
-
             time.sleep(1)
 
     return Response(generate(), mimetype="text/event-stream")
 
 
+# ----------------- METAWEB -----------------
 @app.route("/start_metaweb", methods=["POST"])
 def start_metaweb():
-    query = request.form.get("query")
-    if not query:
-        return jsonify({"error": "Consulta não informada"}), 400
+    if "file" not in request.files:
+        return jsonify({"error": "Arquivo não enviado"}), 400
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "Nome de arquivo inválido"}), 400
 
     task_id = str(uuid.uuid4())
+    upload_path = os.path.join(UPLOADS_DIR, f"{task_id}_{file.filename}")
+    file.save(upload_path)
+
     progress_file = os.path.join(PROGRESS_DIR, f"metaweb_{task_id}.txt")
     result_file = os.path.join(RESULTS_DIR, f"metaweb_{task_id}.txt")
 
+    # roda o script metaweb.py
     thread = threading.Thread(
         target=run_tool,
-        args=(["python3", os.path.join(TOOLS_DIR, "metaweb.py"), query],
+        args=(["python3", os.path.join(TOOLS_DIR, "metaweb.py"), upload_path],
               progress_file, result_file)
     )
     thread.start()
@@ -196,26 +200,24 @@ def metaweb_progress(task_id):
 
     def generate():
         while True:
+            progress = "0"
             if os.path.exists(progress_file):
                 with open(progress_file) as f:
                     progress = f.read().strip()
-            else:
-                progress = "0"
 
             yield f"data: {json.dumps({'progress': progress})}\n\n"
 
             if progress == "100" and os.path.exists(result_file):
-                with open(result_file) as f:
+                with open(result_file, encoding="utf-8") as f:
                     result = f.read()
                 yield f"data: {json.dumps({'progress': 100, 'result': result})}\n\n"
                 break
-
             time.sleep(1)
 
     return Response(generate(), mimetype="text/event-stream")
 
 
-# 🔹 NOVA ROTA PARA RELATÓRIOS
+# ----------------- RELATÓRIOS -----------------
 @app.route("/relatorio/<data>/<arquivo>")
 def mostrar_relatorio(data, arquivo):
     caminho = os.path.join("static", "relatorios", data, arquivo)
@@ -229,4 +231,5 @@ def mostrar_relatorio(data, arquivo):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5050)
+    port = int(os.environ.get("PORT", 5050))
+    app.run(host="0.0.0.0", port=port)

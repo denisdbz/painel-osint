@@ -10,7 +10,6 @@
 <div id="progress-container" style="display:none;">
     <p>Progresso: <span id="progress">0</span>%</p>
     <pre id="resultado"></pre>
-    <a href="{{ url_for('sherlock_search') }}" class="botao-voltar">🔄 Nova busca</a>
 </div>
 
 <script>
@@ -21,19 +20,19 @@ document.getElementById('sherlock-form').addEventListener('submit', async (e) =>
 
     const resp = await fetch("{{ url_for('sherlock_start') }}", { method: 'POST', body: fd });
     const data = await resp.json();
-    if(data.error) { alert(data.error); return; }
+    if (data.error) { alert(data.error); return; }
 
     const taskId = data.task_id;
     document.getElementById('progress-container').style.display = 'block';
     const resultado = document.getElementById('resultado');
     const progressEl = document.getElementById('progress');
 
-    const evtSource = new EventSource(`{{ url_for('sse_sherlock', task_id='') }}${taskId}`);
+    const evtSource = new EventSource(`{{ url_for('sherlock_progress', task_id='') }}${taskId}`);
     evtSource.onmessage = (event) => {
         const json = JSON.parse(event.data);
         progressEl.textContent = json.progress;
-        if(json.result) resultado.textContent = json.result;
-        if(json.progress === "100") evtSource.close();
+        if (json.result) resultado.textContent = json.result;
+        if (json.progress === "100") evtSource.close();
     };
 });
 </script>

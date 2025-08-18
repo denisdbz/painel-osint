@@ -18,7 +18,7 @@ document.getElementById('metaweb-form').addEventListener('submit', async (e) => 
     const form = e.target;
     const fd = new FormData(form);
 
-    const resp = await fetch("{{ url_for('metaweb_start') }}", { method: 'POST', body: fd });
+    const resp = await fetch("{{ url_for('start_metaweb') }}", { method: 'POST', body: fd });
     const data = await resp.json();
     if(data.error) { alert(data.error); return; }
 
@@ -27,12 +27,12 @@ document.getElementById('metaweb-form').addEventListener('submit', async (e) => 
     const resultado = document.getElementById('resultado');
     const progressEl = document.getElementById('progress');
 
-    const evtSource = new EventSource(`{{ url_for('sse_metaweb_named', task_id='') }}${taskId}`);
+    const evtSource = new EventSource(`/metaweb_progress/${taskId}`);
     evtSource.onmessage = (event) => {
         const json = JSON.parse(event.data);
         progressEl.textContent = json.progress;
         if(json.result) resultado.textContent = json.result;
-        if(json.progress === "100") evtSource.close();
+        if(json.progress === 100 || json.progress === "100") evtSource.close();
     };
 });
 </script>
