@@ -2,13 +2,11 @@
 {% block content %}
 <section class="card">
   <h2>MetaWeb</h2>
-  <form id="form-metaweb" onsubmit="return false;">
-    <label>Domínio ou URL</label>
-    <input type="text" id="metaweb-target" placeholder="ex.: example.com" required />
-    <button id="btn-metaweb">Iniciar</button>
-  </form>
-  <div class="progress"><div id="pg-metaweb" class="bar"></div></div>
-  <pre id="out-metaweb" class="output"></pre>
+<form id="metaweb-form">
+  <input type="file" id="metaweb-file" name="file" required />
+  <button type="submit">Iniciar</button>
+</form>
+<pre id="out-metaweb"></pre>
 </section>
 {% endblock %}
 

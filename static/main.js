@@ -36,29 +36,20 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Submissão Metaweb (UPLOAD)
-    const metawebForm = document.getElementById("metaweb-form");
-    if (metawebForm) {
-        metawebForm.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const fileInput = document.getElementById("metaweb-file");
-            if (!fileInput.files.length) {
-                alert("Selecione um arquivo para enviar!");
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append("file", fileInput.files[0]);
-
-            const res = await fetch("/metaweb/start", {
-                method: "POST",
-                body: formData
-            });
-
-            const data = await res.json();
-            startSSE("metaweb", data.task_id);
-        });
-    }
+// Submit MetaWeb com upload
+const metawebForm = document.getElementById("metaweb-form");
+if (metawebForm) {
+  metawebForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = document.getElementById("metaweb-file");
+    if (!input?.files?.[0]) { alert("Selecione um arquivo."); return; }
+    const fd = new FormData();
+    fd.append("file", input.files[0]);
+    const res = await fetch("/metaweb/start", { method: "POST", body: fd });
+    const data = await res.json();
+    startSSE("metaweb", data.task_id);
+  });
+}
 
     // Função para receber logs em tempo real
     function startSSE(tool, task_id) {
