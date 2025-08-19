@@ -1,10 +1,13 @@
-{% extends "base.html" %}                           
+{% extends "base.html" %}
 {% block content %}
-    <h2>Bem-vindo ao Painel OSINT</h2>
-    <p>Escolha uma das ferramentas abaixo:</p>      
-    <div class="cards">
-        <a href="{{ url_for('vazamento') }}" class="card">📧 Verificar Vazamento de E-mail</a>
-        <a href="{{ url_for('metaweb') }}" class="card">📂 Análise de Metadados (MetaWeb)</a>
-        <a href="{{ url_for('sherlock') }}" class="card">🕵 Busca de Usuário (Sherlock)</a>
-    </div>
+<section class="card">
+  <h2>Bem-vindo</h2>
+  <p>Mantenho o layout simples e funcional. Use as abas acima para acessar as ferramentas.</p>
+  <ul>
+    <li><strong>Sherlock</strong>: busca de perfis por nome de usuário.</li>
+    <li><strong>MetaWeb</strong>: coleta de DNS/WHOIS/HTTP/Wayback.</li>
+    <li><strong>Vazamento</strong>: verificação por e-mail com holehe.</li>
+  </ul>
+</section>
 {% endblock %}
+

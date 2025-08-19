@@ -1,26 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Busca de Usuário (Sherlock)</h2>
-
-<form id="sherlock-form">
-    <input type="text" name="username" placeholder="Digite o nome de usuário" required>
-    <button type="submit">Buscar</button>
-</form>
-
-<pre id="resultado"></pre>
-
-<script>
-document.getElementById('sherlock-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);              
-    const resp = await fetch("{{ url_for('sherlock_start') }}", { method: 'POST', body: fd });
-    const data = await resp.json();
-    if (data.error) { alert(data.error); return; }
-
-    const resultado = document.getElementById('resultado');
-    window.startSherlockProgress(data.task_id, (payload) => {
-        if (payload.result) resultado.textContent = payload.result;
-    });
-});
-</script>
+<section class="card">
+  <h2>Sherlock</h2>
+  <form id="form-sherlock" onsubmit="return false;">
+    <label>Usuário</label>
+    <input type="text" id="sherlock-username" placeholder="ex.: johndoe" required />
+    <button id="btn-sherlock">Iniciar</button>
+  </form>
+  <div class="progress"><div id="pg-sherlock" class="bar"></div></div>
+  <pre id="out-sherlock" class="output"></pre>
+</section>
 {% endblock %}
+

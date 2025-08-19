@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: painel-osint
+    env: python
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 2 -k gthread -t 120 --worker-connections 100 -b 0.0.0.0:$PORT app:create_app()
+    autoDeploy: true
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+

@@ -1,6 +1,10 @@
-flask
-flask-cors
-requests
-pandas
-colorama
-git+https://github.com/sherlock-project/sherlock.git
+Flask==3.0.3
+flask-cors==4.0.1
+gunicorn==22.0.0
+requests==2.32.3
+beautifulsoup4==4.12.3
+python-whois==0.9.4
+dnspython==2.6.1
+sherlock-project==0.14.3
+holehe==1.61.7
+

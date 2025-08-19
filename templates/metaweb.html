@@ -1,27 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Análise de Metadados (MetaWeb)</h2>
-
-<form id="metaweb-form" enctype="multipart/form-data">
-    <input type="file" name="file" required>
-    <button type="submit">Iniciar Análise</button>
-</form>
-
-<pre id="resultado"></pre>
-
-<script>
-document.getElementById('metaweb-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-
-    const resp = await fetch("{{ url_for('metaweb_start') }}", { method: 'POST', body: fd });
-    const data = await resp.json();
-    if (data.error) { alert(data.error); return; }
-
-    const resultado = document.getElementById('resultado');
-    window.startMetawebProgress(data.task_id, (payload) => {
-        if (payload.result) resultado.textContent = payload.result;
-    });
-});
-</script>
+<section class="card">
+  <h2>MetaWeb</h2>
+  <form id="form-metaweb" onsubmit="return false;">
+    <label>Domínio ou URL</label>
+    <input type="text" id="metaweb-target" placeholder="ex.: example.com" required />
+    <button id="btn-metaweb">Iniciar</button>
+  </form>
+  <div class="progress"><div id="pg-metaweb" class="bar"></div></div>
+  <pre id="out-metaweb" class="output"></pre>
+</section>
 {% endblock %}
+
