@@ -1,17 +1,14 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<title>Sherlock - Resultados</title>
-<link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-<h2>Sherlock - Resultados</h2>
-<ul>
-{% for item in results %}
-<li>{{ item }}</li>
-{% endfor %}
-</ul>
-<a href="/sherlock">Voltar</a>
-</body>
-</html>
+{% extends "base.html" %}
+{% block content %}
+<h2>🔎 Resultados - Sherlock</h2>
+{% if results %}
+    <ul>
+    {% for site, url in results.items() %}
+        <li><a href="{{ url }}" target="_blank">{{ site }}</a></li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>Nenhum resultado encontrado.</p>
+{% endif %}
+<a href="{{ url_for('sherlock') }}">🔙 Nova busca</a>
+{% endblock %}

@@ -1,17 +1,14 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<title>Vazamento - Resultados</title>
-<link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-<h2>Vazamento - Resultados</h2>
-<ul>
-{% for item in results %}
-<li>{{ item }}</li>
-{% endfor %}
-</ul>
-<a href="/vazamento">Voltar</a>
-</body>
-</html>
+{% extends "base.html" %}
+{% block content %}
+<h2>📧 Resultados - Vazamento</h2>
+{% if results %}
+    <ul>
+    {% for linha in results %}
+        <li>{{ linha }}</li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>Nenhum vazamento encontrado para este e-mail.</p>
+{% endif %}
+<a href="{{ url_for('vazamento') }}">🔙 Nova verificação</a>
+{% endblock %}

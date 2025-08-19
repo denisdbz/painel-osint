@@ -2,11 +2,14 @@
 {% block content %}
 <section class="card">
   <h2>MetaWeb</h2>
-<form id="metaweb-form">
-  <input type="file" id="metaweb-file" name="file" required />
-  <button type="submit">Iniciar</button>
-</form>
-<pre id="out-metaweb"></pre>
+  <form id="metaweb-form" enctype="multipart/form-data">
+    <label for="metaweb-file">Selecione um arquivo:</label>
+    <input type="file" id="metaweb-file" name="file" required />
+    <button type="submit">Enviar</button>
+  </form>
+  <div class="progress">
+    <div id="pg-metaweb" class="progress-bar"></div>
+  </div>
+  <pre id="out-metaweb" class="output"></pre>
 </section>
 {% endblock %}
-

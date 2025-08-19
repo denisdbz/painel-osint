@@ -1,28 +1,6 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<title>Sherlock - Progresso</title>
-<link rel="stylesheet" href="/static/style.css">
-<script>
-function atualizarProgresso() {
-    fetch(window.location.href)
-    .then(response => response.json())
-    .then(data => {
-        document.getElementById('barra').style.width = data.progress + '%';
-        document.getElementById('percent').innerText = data.progress + '%';
-        if(data.progress < 100) setTimeout(atualizarProgresso, 1000);
-        else window.location.href = '/sherlock_results/' + data.id;
-    });
-}
-window.onload = atualizarProgresso;
-</script>
-</head>
-<body>
-<h2>Sherlock - Progresso</h2>
-<div class="progress-container">
-    <div class="progress-bar" id="barra"></div>
-</div>
-<p id="percent">0%</p>
-</body>
-</html>
+{% extends "base.html" %}
+{% block content %}
+<h2>🔎 Sherlock - Em andamento</h2>
+<p>Aguarde enquanto buscamos informações sobre <strong>{{ username }}</strong>...</p>
+<meta http-equiv="refresh" content="3">
+{% endblock %}

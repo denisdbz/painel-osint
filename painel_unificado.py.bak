@@ -83,7 +83,7 @@ def sse_stream(task_id):
                     last_ping = now
     except GeneratorExit:
         app.logger.debug("SSE client disconnected")
-    except Exception:
+    except Exception as e:
         app.logger.exception("sse_stream exception")
     finally:
         app.logger.debug("sse_stream finished")
@@ -112,7 +112,7 @@ def run_command_stream(cmd_list, cwd=None, env=None):
             bufsize=1,
             universal_newlines=True,
         )
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         raise
 
     try:
@@ -136,6 +136,7 @@ def detect_executable(module_name, script_name=None):
     else fallback to python -m module.
     Returns tuple (cmd_prefix_list, how) where how is 'exe' or 'module'.
     """
+    import shutil
     exe = shutil.which(module_name)
     if exe:
         return [exe], "exe"
@@ -215,10 +216,13 @@ def get_param_any(request_obj, name):
 def _sherlock_worker(task_id, username):
     try:
         sse_put(task_id, "status", {"phase": "starting", "msg": "Iniciando Sherlock"})
+        # choose invocation
         exe_prefix, how = detect_executable("sherlock", script_name=os.path.join("tools", "sherlock", "sherlock.py"))
         output_file = os.path.join(RUNS_DIR, f"{task_id}_sherlock.json")
+        # Build command (ensure --json points to file)
         cmd = exe_prefix + [username, "--print-found", "--timeout", "8", "--json", output_file]
         sse_put(task_id, "log", {"line": f"CMD: {' '.join(cmd)}"})
+        # stream output
         try:
             for line in run_command_stream(cmd):
                 sse_put(task_id, "log", {"line": line})
@@ -228,14 +232,17 @@ def _sherlock_worker(task_id, username):
         except subprocess.CalledProcessError as e:
             sse_put(task_id, "error", {"msg": f"Sherlock retornou erro (exit {e.returncode})"})
             return
+        # try to read JSON output
         if os.path.exists(output_file):
             try:
                 with open(output_file, "r", encoding="utf-8") as f:
                     text = f.read()
+                # sherlock output can be lines of JSON or a single JSON; try to parse robustly
                 try:
                     obj = json.loads(text)
                     sse_put(task_id, "result", {"type": "sherlock_output", "data": obj})
                 except Exception:
+                    # maybe multiple JSON lines - try last line
                     last = text.strip().splitlines()[-1]
                     try:
                         obj = json.loads(last)
@@ -245,9 +252,9 @@ def _sherlock_worker(task_id, username):
             except Exception as e:
                 sse_put(task_id, "log", {"line": f"Falha lendo {output_file}: {e}"})
         sse_put(task_id, "done", {"ok": True})
-    except Exception:
+    except Exception as e:
         app.logger.exception("Erro no _sherlock_worker")
-        sse_put(task_id, "error", {"msg": "Erro interno no worker sherlock"})
+        sse_put(task_id, "error", {"msg": str(e)})
     finally:
         end_task(task_id)
 
@@ -255,11 +262,13 @@ def _vazamento_worker(task_id, email):
     try:
         sse_put(task_id, "status", {"phase": "starting", "msg": "Rodando checagem de vazamento (holehe)"})
         exe_prefix, how = detect_executable("holehe", script_name=None)
+        # don't pass -j -s which can be unsupported; run simple invocation
         cmd = exe_prefix + [email]
         sse_put(task_id, "log", {"line": f"CMD: {' '.join(cmd)}"})
         try:
             for line in run_command_stream(cmd):
                 sse_put(task_id, "log", {"line": line})
+                # if line is JSON try to forward as result
                 stripped = line.strip()
                 if stripped.startswith("{") and stripped.endswith("}"):
                     try:
@@ -273,28 +282,32 @@ def _vazamento_worker(task_id, email):
         except subprocess.CalledProcessError as e:
             sse_put(task_id, "error", {"msg": f"Holehe retornou erro (exit {e.returncode})"})
             return
+
         sse_put(task_id, "done", {"ok": True})
-    except Exception:
+    except Exception as e:
         app.logger.exception("Erro no _vazamento_worker")
-        sse_put(task_id, "error", {"msg": "Erro interno no worker vazamento"})
+        sse_put(task_id, "error", {"msg": str(e)})
     finally:
         end_task(task_id)
 
 def _metaweb_worker(task_id, file_path=None, target=None):
     try:
         sse_put(task_id, "status", {"phase": "starting", "msg": "Coletando MetaWeb"})
+        # If upload provided -> analyze file (hashes, size, basic header)
         if file_path:
             sse_put(task_id, "log", {"line": f"Analisando arquivo: {file_path}"})
             try:
                 info = file_hashes(file_path)
                 info["filename"] = os.path.basename(file_path)
+                # try to get first bytes preview
                 with open(file_path, "rb") as f:
                     preview = f.read(1024)
                 info["preview_hex"] = preview[:256].hex()
                 sse_put(task_id, "result", {"type": "file", "data": info})
-            except Exception:
-                sse_put(task_id, "log", {"line": "Erro ao analisar arquivo."})
+            except Exception as e:
+                sse_put(task_id, "log", {"line": f"Erro ao analisar arquivo: {e}"})
         elif target:
+            # preserve old behavior: DNS, WHOIS, HTTP, robots, sitemap, wayback
             host = safe_domain(target)
             sse_put(task_id, "log", {"line": f"Consulta de alvo: {host}"})
             dns_info = {}
@@ -306,17 +319,19 @@ def _metaweb_worker(task_id, file_path=None, target=None):
                         dns_info[rtype] = [str(rdata) for rdata in answers]
                     except Exception:
                         dns_info[rtype] = []
-            except Exception:
-                sse_put(task_id, "log", {"line": "dns/resolver indisponível"})
+            except Exception as e:
+                sse_put(task_id, "log", {"line": f"dns/resolver não disponível: {e}"})
                 dns_info = {}
             sse_put(task_id, "result", {"type": "dns", "data": dns_info})
+            # whois
             try:
                 import whois
                 w = whois.whois(host)
                 who = {k: (str(v) if not isinstance(v, (list, tuple)) else ", ".join(map(str, v))) for k, v in w.items()}
                 sse_put(task_id, "result", {"type": "whois", "data": who})
-            except Exception:
-                sse_put(task_id, "log", {"line": "WHOIS erro"})
+            except Exception as e:
+                sse_put(task_id, "log", {"line": f"WHOIS erro: {e}"})
+            # http
             try:
                 import requests
                 r = requests.get(f"http://{host}", timeout=10, allow_redirects=True, headers={"User-Agent": "OSINT-Panel/1.0"})
@@ -335,31 +350,32 @@ def _metaweb_worker(task_id, file_path=None, target=None):
                 except Exception:
                     pass
                 sse_put(task_id, "result", {"type": "http", "data": info})
-            except Exception:
-                sse_put(task_id, "log", {"line": "HTTP erro"})
+            except Exception as e:
+                sse_put(task_id, "log", {"line": f"HTTP erro: {e}"})
+            # robots/sitemap/wayback also attempted (similar to previous implementation)
             try:
                 import requests
                 r = requests.get(f"http://{host}/robots.txt", timeout=8)
                 sse_put(task_id, "result", {"type": "robots", "data": {"status": r.status_code, "text": r.text[:5000]}})
-            except Exception:
-                sse_put(task_id, "log", {"line": "robots erro"})
+            except Exception as e:
+                sse_put(task_id, "log", {"line": f"robots erro: {e}"})
             try:
                 r = requests.get(f"http://{host}/sitemap.xml", timeout=8)
                 sse_put(task_id, "result", {"type": "sitemap", "data": {"status": r.status_code, "text": r.text[:5000]}})
-            except Exception:
-                sse_put(task_id, "log", {"line": "sitemap erro"})
+            except Exception as e:
+                sse_put(task_id, "log", {"line": f"sitemap erro: {e}"})
             try:
                 wb = requests.get(f"https://web.archive.org/cdx/search/cdx?url={host}&output=json&limit=5&filter=statuscode:200&from=2000", timeout=10)
                 if wb.ok:
                     sse_put(task_id, "result", {"type": "wayback", "data": wb.json()})
-            except Exception:
-                sse_put(task_id, "log", {"line": "wayback erro"})
+            except Exception as e:
+                sse_put(task_id, "log", {"line": f"wayback erro: {e}"})
         else:
             sse_put(task_id, "log", {"line": "Nenhum arquivo nem target fornecido."})
         sse_put(task_id, "done", {"ok": True})
-    except Exception:
+    except Exception as e:
         app.logger.exception("Erro no _metaweb_worker")
-        sse_put(task_id, "error", {"msg": "Erro interno no worker metaweb"})
+        sse_put(task_id, "error", {"msg": str(e)})
     finally:
         end_task(task_id)
 
@@ -368,6 +384,7 @@ def _metaweb_worker(task_id, file_path=None, target=None):
 # -------------------
 @app.route("/sherlock/start", methods=["POST"])
 def sherlock_start():
+    # accept JSON or form data
     username = get_param_any(request, "username") or ""
     username = username.strip()
     if not username:
@@ -390,6 +407,7 @@ def vazamento_start():
 
 @app.route("/metaweb/start", methods=["POST"])
 def metaweb_start():
+    # prefer file upload
     file = request.files.get("file")
     target = get_param_any(request, "target")
     if not file and not target:
@@ -397,6 +415,7 @@ def metaweb_start():
     file_path = None
     if file:
         filename = secure_filename(file.filename)
+        # create unique name
         unique = f"{int(time.time())}_{uuid.uuid4().hex}_{filename}"
         file_path = os.path.join(UPLOAD_DIR, unique)
         file.save(file_path)
@@ -421,5 +440,6 @@ def create_app():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
+    # Note: for production use gunicorn as documented. For quick testing this is fine.
     app.logger.info("Starting app on port %s", port)
     app.run(host="0.0.0.0", port=port, debug=False)
