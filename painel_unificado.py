@@ -49,7 +49,6 @@ def start_task():
     return task_id
 
 def end_task(task_id):
-    # pequeno delay para garantir envio de finalizações
     time.sleep(0.2)
     streams.pop(task_id, None)
     app.logger.info("end_task %s", task_id)
@@ -59,14 +58,12 @@ def sse_put(task_id, event, data):
     if not q:
         app.logger.debug("sse_put: no stream %s", task_id)
         return
-    # sempre enviar JSON no campo data
     payload = f"event: {event}\n" + "data: " + json.dumps(data, ensure_ascii=False) + "\n\n"
     q.put(payload)
 
 def sse_stream(task_id):
     q = streams.get(task_id)
     if q is None:
-        # enviar evento error com mensagem JSON
         yield 'event: error\n' + 'data: ' + json.dumps({"msg": "task_not_found"}) + '\n\n'
         return
     try:
@@ -96,11 +93,6 @@ def safe_domain(input_str):
     return host
 
 def run_command_stream(cmd_list, cwd=None, env=None):
-    """
-    Executa comando (lista) e gera linhas (strings) não-vazias.
-    cmd_list deve ser lista (ex: ['sherlock', 'username']) — detect_executable retorna arrays.
-    """
-    # log mais resiliente caso cmd_list seja string/list
     try:
         cmd_str = " ".join(cmd_list) if isinstance(cmd_list, (list, tuple)) else str(cmd_list)
     except Exception:
@@ -119,20 +111,16 @@ def run_command_stream(cmd_list, cwd=None, env=None):
             universal_newlines=True,
         )
     except FileNotFoundError:
-        # deixa o caller tratar esse erro
         raise
 
     try:
-        # leitura linha a linha; remove CR/LF e ignora linhas vazias
         for raw in iter(proc.stdout.readline, ""):
             if raw is None:
                 break
             line = raw.rstrip("\r\n")
-            # ignora linhas vazias ou só espaços
             if not line.strip():
                 continue
             yield line
-        # fecha e espera
         try:
             proc.stdout.close()
         except Exception:
@@ -147,10 +135,6 @@ def run_command_stream(cmd_list, cwd=None, env=None):
             pass
 
 def detect_executable(module_name, script_name=None):
-    """
-    Tenta detectar um executável (shutil.which), depois um script local, senão fallback para python -m module_name
-    Retorna (prefix_list, how) onde prefix_list é a lista inicial para compor o comando.
-    """
     exe = shutil.which(module_name)
     if exe:
         return [exe], "exe"
@@ -195,7 +179,6 @@ def vazamento_page():
 
 @app.route("/sse/<tool>/<task_id>")
 def sse(tool, task_id):
-    # evita buffering em proxies e caches
     headers = {
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
@@ -203,7 +186,7 @@ def sse(tool, task_id):
     return Response(stream_with_context(sse_stream(task_id)), mimetype="text/event-stream", headers=headers)
 
 # -------------------
-# Utilities to read params (accept JSON or form)
+# Utilities to read params
 # -------------------
 def get_param_any(request_obj, name):
     try:
@@ -235,14 +218,12 @@ def _sherlock_worker(task_id, username):
             exe_prefix, how = detect_executable("sherlock", script_name=os.path.join("tools", "sherlock", "sherlock.py"))
             cwd = None
 
-        # timeout maior para evitar falha precoce
         cmd = exe_prefix + [username, "--print-found", "--timeout", "15"]
         sse_put(task_id, "log", {"line": f"CMD: {' '.join(cmd)}"})
 
         url_pattern = re.compile(r"(https?://\S+)")
         try:
             for line in run_command_stream(cmd, cwd=cwd):
-                # adiciona links clicáveis (frontend renderiza apenas para sherlock)
                 line_with_links = url_pattern.sub(
                     r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>',
                     line,
@@ -264,6 +245,7 @@ def _sherlock_worker(task_id, username):
 
 def _vazamento_worker(task_id, email=None, password=None):
     try:
+        url_pattern = re.compile(r"(https?://\S+)")
         if password:
             sse_put(task_id, "status", {"phase": "starting", "msg": "Verificando senha (HIBP)"})
             try:
@@ -301,9 +283,16 @@ def _vazamento_worker(task_id, email=None, password=None):
             sse_put(task_id, "log", {"line": f"CMD: {' '.join(cmd)}"})
             try:
                 for line in run_command_stream(cmd):
-                    sse_put(task_id, "log", {"line": line})
+                    # ignora linhas que são apenas porcentagem de progresso
+                    if re.fullmatch(r"\d{1,3}%", line.strip()):
+                        continue
+                    # transforma URLs em links clicáveis
+                    line_with_links = url_pattern.sub(
+                        r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>',
+                        line,
+                    )
+                    sse_put(task_id, "log", {"line": line_with_links})
                     stripped = line.strip()
-                    # algumas versões do holehe emitem JSON por linha
                     if stripped.startswith("{") and stripped.endswith("}"):
                         try:
                             obj = json.loads(stripped)
@@ -327,6 +316,7 @@ def _vazamento_worker(task_id, email=None, password=None):
     finally:
         end_task(task_id)
 
+# ... (_metaweb_worker e endpoints permanecem iguais) ...
 def _metaweb_worker(task_id, file_path=None, target=None):
     try:
         sse_put(task_id, "status", {"phase": "starting", "msg": "Coletando MetaWeb"})
