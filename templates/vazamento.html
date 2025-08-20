@@ -2,11 +2,11 @@
 {% block content %}
 <section class="card" style="max-width:980px;margin:16px auto;display:flex;flex-direction:column;gap:12px;">
   <h2>Vazamentos (Holehe)</h2>
-
-<p>Verifique se um e-mail aparece em vazamentos de dados conhecidos usando a ferramenta Holehe.</p>
+  <p>Verifique se um e-mail aparece em vazamentos de dados conhecidos usando a ferramenta Holehe.</p>
 
   <form id="vazamento-form" style="display:flex;gap:8px;flex-wrap:wrap;">
-    <label style="flex:1 1 200px">E-mail
+    <label style="flex:1 1 200px">
+      E-mail
       <input type="email" id="vazamento-email" placeholder="ex.: seu@email.com" required style="width:100%;"/>
     </label>
     <div style="align-self:center;">
@@ -23,4 +23,59 @@
     </div>
   </div>
 </section>
+
+<script>
+document.getElementById("vazamento-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("vazamento-email").value;
+  const bar = document.getElementById("pg-vazamento");
+  const out = document.getElementById("out-vazamento");
+
+  bar.style.width = "0%";
+  out.textContent = "⏳ Iniciando busca...";
+
+  // inicia task
+  const res = await fetch("/start_vazamento", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ email })
+  });
+  const data = await res.json();
+  const taskId = data.task_id;
+
+  // função para atualizar progresso
+  async function checkStatus() {
+    const resp = await fetch(`/status/${taskId}`);
+    const payload = await resp.json();
+
+    if (payload.state === "PENDING" || payload.state === "PROGRESS") {
+      bar.style.width = (payload.progress || 10) + "%";
+      out.textContent = payload.status || "⏳ Processando...";
+      setTimeout(checkStatus, 1500);
+    } else if (payload.state === "SUCCESS") {
+      bar.style.width = "100%";
+      const resultado = payload.resultado || {};
+      let html = "";
+
+      if (resultado.resumo) {
+        html += `<p>${resultado.resumo}</p>`;
+      }
+
+      if (resultado.links && resultado.links.length > 0) {
+        html += `<h4>🌍 Links de busca:</h4><ul>`;
+        resultado.links.forEach(l => {
+          html += `<li><a href="${l.url}" target="_blank" style="color:#4da3ff;">${l.nome}</a></li>`;
+        });
+        html += `</ul>`;
+      }
+
+      out.innerHTML = html || "✅ Nenhum resultado encontrado.";
+    } else {
+      out.textContent = "⚠️ Erro ao processar.";
+    }
+  }
+
+  checkStatus();
+});
+</script>
 {% endblock %}
