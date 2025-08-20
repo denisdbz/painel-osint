@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="card">
-  <h2>MetaWeb</h2>
-  <form id="metaweb-form" enctype="multipart/form-data">
-    <label for="metaweb-file">Selecione um arquivo:</label>
-    <input type="file" id="metaweb-file" name="file" required />
-    <button type="submit">Enviar</button>
+<section class="card" style="max-width:980px;margin:16px auto;display:flex;flex-direction:column;gap:12px;">
+  <h2>📂 MetaWeb — análise de metadados via upload</h2>
+  <p>Envie um arquivo (imagem, vídeo, PDF, etc.) para extrair EXIF/MediaInfo/assinaturas.</p>
+  <form id="metaweb-form" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <input type="file" id="metaweb-file" name="file" accept="*/*" required />
+    <button type="submit">Iniciar</button>
   </form>
-  <div class="progress">
-    <div id="pg-metaweb" class="progress-bar"></div>
+
+  <div style="height:8px;background:#0b1220;border-radius:4px;overflow:hidden;">
+    <div id="pg-metaweb" class="bar" style="height:100%;width:0%;background:linear-gradient(90deg,#b9ffb0,#56ffd2)"></div>
   </div>
-  <pre id="out-metaweb" class="output"></pre>
+
+  <pre id="out-metaweb" class="output" style="background:#0f1724;color:#dbeafe;padding:12px;border-radius:8px;max-height:720px;overflow:auto;white-space:pre-wrap;word-break:break-word;"></pre>
 </section>
 {% endblock %}

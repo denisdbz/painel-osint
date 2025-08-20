@@ -14,6 +14,10 @@
     <a href="{{ url_for('sherlock_page') }}">Sherlock</a>
     <a href="{{ url_for('metaweb_page') }}">MetaWeb</a>
     <a href="{{ url_for('vazamento_page') }}">Vazamento</a>
+    <!-- Botão para alternar tema -->
+    <button id="theme-toggle" style="margin-left:12px; padding:6px 10px; border-radius:8px; border:0; cursor:pointer; background:#13172a; color:var(--text);">
+      🌙
+    </button>
   </nav>
 </header>
 <main>
@@ -22,7 +26,27 @@
 <footer>
   <small>Deploy-friendly • Flask + SSE • Render</small>
 </footer>
+
+<!-- Script do painel -->
 <script src="{{ url_for('static', filename='main.js') }}"></script>
+
+<!-- Script do Dark/Light mode -->
+<script>
+  const toggleBtn = document.getElementById("theme-toggle");
+  const body = document.body;
+
+  // Carregar preferência salva
+  if (localStorage.getItem("theme") === "light") {
+    body.classList.add("light");
+    toggleBtn.textContent = "☀️";
+  }
+
+  toggleBtn.addEventListener("click", () => {
+    body.classList.toggle("light");
+    const isLight = body.classList.contains("light");
+    toggleBtn.textContent = isLight ? "☀️" : "🌙";
+    localStorage.setItem("theme", isLight ? "light" : "dark");
+  });
+</script>
 </body>
 </html>
-

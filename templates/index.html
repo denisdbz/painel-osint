@@ -1,13 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="card">
-  <h2>Bem-vindo</h2>
-  <p>Mantenho o layout simples e funcional. Use as abas acima para acessar as ferramentas.</p>
-  <ul>
-    <li><strong>Sherlock</strong>: busca de perfis por nome de usuário.</li>
-    <li><strong>MetaWeb</strong>: coleta de DNS/WHOIS/HTTP/Wayback.</li>
-    <li><strong>Vazamento</strong>: verificação por e-mail com holehe.</li>
-  </ul>
+
+<h2 class="text-xl font-bold mb-2">Painel OSINT Unificado</h2>
+<p>Escolha uma das ferramentas acima para começar:</p>
+<ul class="list-disc ml-6 mt-2">
+  <li><b>Sherlock</b>: busca perfis por nome de usuário</li>
+  <li><b>MetaWeb</b>: análise de metadados ocultos</li>
+  <li><b>Vazamento</b>: verificação de e-mails/senhas</li>
+</ul>
+
 </section>
 {% endblock %}
 

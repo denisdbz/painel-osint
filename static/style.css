@@ -6,35 +6,60 @@
   --accent: #60a5fa;
   --accent-2: #34d399;
 }
+
 * { box-sizing: border-box; }
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
   background: var(--bg);
   color: var(--text);
 }
+
 header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid #1f2438;
+  flex-wrap: wrap; /* <-- para quebrar em telas pequenas */
 }
-header h1 { margin: 0; font-size: 20px; }
+
+header h1 { 
+  margin: 0; 
+  font-size: 20px; 
+}
+
+nav {
+  display: flex;
+  gap: 1rem;
+  background: var(--nav-bg);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  flex-wrap: wrap; /* <-- permite quebra de links */
+}
+
 nav a {
   color: var(--text);
   text-decoration: none;
-  margin-left: 14px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: #13172a;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--nav-link-bg);
+  color: var(--nav-link-text);
+  transition: background 0.3s, color 0.3s;
 }
-nav a:hover { background: #1a2140; }
+
+nav a:hover {
+  background: var(--link-color);
+  color: #fff;
+}
+
 main {
   max-width: 980px;
   margin: 24px auto;
   padding: 0 16px;
 }
+
 .card {
   background: var(--card);
   border: 1px solid #222846;
@@ -42,22 +67,49 @@ main {
   padding: 18px;
   box-shadow: 0 6px 24px rgba(0,0,0,0.35);
 }
+
 form {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
   margin-bottom: 14px;
 }
+
 label { grid-column: 1 / -1; color: var(--muted); }
+
 input {
-  width: 100%; border-radius: 12px; border: 1px solid #273057;
-  background: #0f1429; color: var(--text); padding: 10px 12px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #273057;
+  background: #0f1429;
+  color: var(--text);
+  padding: 10px 12px;
 }
+
 button {
-  border: 0; background: var(--accent); color: #0b1020; border-radius: 12px; padding: 10px 18px; font-weight: 700;
+  border: 0;
+  background: var(--accent);
+  color: #0b1020;
+  border-radius: 12px;
+  padding: 10px 18px;
+  font-weight: 700;
 }
-.progress { height: 8px; background: #11152a; border-radius: 999px; overflow: hidden; margin-bottom: 12px; }
-.bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .25s ease; }
+
+.progress {
+  height: 8px;
+  background: #11152a;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width .25s ease;
+}
+
 .output {
   white-space: pre-wrap;
   background: #0b0f21;
@@ -67,3 +119,129 @@ button {
   min-height: 160px;
 }
 
+.card p {
+  font-size: 0.95rem;
+  color: var(--muted);
+  margin: 0.5em 0 1em 0;
+  line-height: 1.4;
+}
+
+/* ===== Tema Claro ===== */
+body.light {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --accent-2: #16a34a;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ====== Variáveis de cor ====== */
+:root {
+  --bg-color: #ffffff;
+  --text-color: #111111;
+  --card-bg: #f8f8f8;
+  --link-color: #1a73e8;
+  --nav-bg: #eaeaea;
+  --nav-link-bg: #ffffff;
+  --nav-link-text: #111111;
+}
+
+body.dark-mode {
+  --bg-color: #121212;
+  --text-color: #e0e0e0;
+  --card-bg: #1e1e1e;
+  --link-color: #4dabf7;
+  --nav-bg: #1a1a1a;
+  --nav-link-bg: #2a2a2a;
+  --nav-link-text: #e0e0e0;
+}
+
+/* ==================== RESPONSIVIDADE ==================== */
+
+/* Tablets (até 768px) */
+@media (max-width: 768px) {
+  header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  main {
+    padding: 0 12px;
+  }
+
+  form {
+    grid-template-columns: 1fr;
+  }
+
+  button {
+    width: 100%;
+  }
+}
+
+/* Celulares (até 480px) */
+@media (max-width: 480px) {
+  header h1 {
+    font-size: 18px;
+  }
+
+  nav {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  nav a {
+    width: 100%;
+    text-align: center;
+  }
+
+  .card {
+    padding: 14px;
+  }
+
+  input {
+    font-size: 0.9rem;
+    padding: 8px 10px;
+  }
+
+  button {
+    font-size: 0.9rem;
+    padding: 8px 14px;
+  }
+}
+form {
+  display: flex; /* muda de grid para flex */
+  gap: 10px;
+  margin-bottom: 14px;
+  align-items: center; /* garante alinhamento vertical */
+}
+
+input {
+  flex: 1; /* ocupa todo o espaço livre */
+  border-radius: 12px;
+  border: 1px solid #273057;
+  background: #0f1429;
+  color: var(--text);
+  padding: 10px 14px;
+  font-size: 1rem;
+  height: 44px; /* altura fixa igual ao botão */
+  box-sizing: border-box;
+}
+
+button {
+  border: 0;
+  background: var(--accent);
+  color: #0b1020;
+  border-radius: 12px;
+  padding: 0 18px;
+  font-weight: 700;
+  font-size: 1rem;
+  height: 44px; /* mesma altura do input */
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
