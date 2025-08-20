@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-# painel_unificado.py  -- Versão robusta para Render (SSE + ferramentas)                                                                   
+# painel_unificado.py  -- Versão robusta para Render (SSE + ferramentas)
 import os
-import sys                                                            
-import re                                                             
+import sys
+import re
 import json
-import uuid                                                           
-import time                                                           
+import uuid
+import time
 import queue
-import shutil                                                         
-import hashlib                                                        
+import shutil
+import hashlib
 import logging
-import threading                                                      
-import subprocess                                                     
+import threading
+import subprocess
 from urllib.parse import urlparse
-from pathlib import Path                                                                                                                    
+from pathlib import Path
 from werkzeug.utils import secure_filename
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context                                                   
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
-                                                                      
-# ----------------------                                              
+
+# ----------------------
 # Config / paths
-# ----------------------                                              
+# ----------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")                        
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 RUNS_DIR = os.path.join(BASE_DIR, "runs")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RUNS_DIR, exist_ok=True)
@@ -49,6 +49,7 @@ def start_task():
     return task_id
 
 def end_task(task_id):
+    # pequeno delay para garantir envio de finalizações
     time.sleep(0.2)
     streams.pop(task_id, None)
     app.logger.info("end_task %s", task_id)
@@ -58,13 +59,15 @@ def sse_put(task_id, event, data):
     if not q:
         app.logger.debug("sse_put: no stream %s", task_id)
         return
+    # sempre enviar JSON no campo data
     payload = f"event: {event}\n" + "data: " + json.dumps(data, ensure_ascii=False) + "\n\n"
     q.put(payload)
 
 def sse_stream(task_id):
     q = streams.get(task_id)
     if q is None:
-        yield 'event: error\n' + 'data: "task_not_found"\n\n'
+        # enviar evento error com mensagem JSON
+        yield 'event: error\n' + 'data: ' + json.dumps({"msg": "task_not_found"}) + '\n\n'
         return
     try:
         last_ping = 0
@@ -93,7 +96,17 @@ def safe_domain(input_str):
     return host
 
 def run_command_stream(cmd_list, cwd=None, env=None):
-    app.logger.info("run_command_stream: %s", " ".join(cmd_list))
+    """
+    Executa comando (lista) e gera linhas (strings) não-vazias.
+    cmd_list deve ser lista (ex: ['sherlock', 'username']) — detect_executable retorna arrays.
+    """
+    # log mais resiliente caso cmd_list seja string/list
+    try:
+        cmd_str = " ".join(cmd_list) if isinstance(cmd_list, (list, tuple)) else str(cmd_list)
+    except Exception:
+        cmd_str = str(cmd_list)
+    app.logger.info("run_command_stream: %s", cmd_str)
+
     try:
         proc = subprocess.Popen(
             cmd_list,
@@ -106,14 +119,24 @@ def run_command_stream(cmd_list, cwd=None, env=None):
             universal_newlines=True,
         )
     except FileNotFoundError:
+        # deixa o caller tratar esse erro
         raise
 
     try:
-        for line in iter(proc.stdout.readline, ""):
-            if line is None:
+        # leitura linha a linha; remove CR/LF e ignora linhas vazias
+        for raw in iter(proc.stdout.readline, ""):
+            if raw is None:
                 break
-            yield line.rstrip("\n")
-        proc.stdout.close()
+            line = raw.rstrip("\r\n")
+            # ignora linhas vazias ou só espaços
+            if not line.strip():
+                continue
+            yield line
+        # fecha e espera
+        try:
+            proc.stdout.close()
+        except Exception:
+            pass
         ret = proc.wait()
         if ret != 0:
             raise subprocess.CalledProcessError(ret, cmd_list)
@@ -124,6 +147,10 @@ def run_command_stream(cmd_list, cwd=None, env=None):
             pass
 
 def detect_executable(module_name, script_name=None):
+    """
+    Tenta detectar um executável (shutil.which), depois um script local, senão fallback para python -m module_name
+    Retorna (prefix_list, how) onde prefix_list é a lista inicial para compor o comando.
+    """
     exe = shutil.which(module_name)
     if exe:
         return [exe], "exe"
@@ -168,7 +195,12 @@ def vazamento_page():
 
 @app.route("/sse/<tool>/<task_id>")
 def sse(tool, task_id):
-    return Response(stream_with_context(sse_stream(task_id)), mimetype="text/event-stream")
+    # evita buffering em proxies e caches
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+    return Response(stream_with_context(sse_stream(task_id)), mimetype="text/event-stream", headers=headers)
 
 # -------------------
 # Utilities to read params (accept JSON or form)
@@ -203,12 +235,14 @@ def _sherlock_worker(task_id, username):
             exe_prefix, how = detect_executable("sherlock", script_name=os.path.join("tools", "sherlock", "sherlock.py"))
             cwd = None
 
-        cmd = exe_prefix + [username, "--print-found", "--timeout", "8"]
+        # timeout maior para evitar falha precoce
+        cmd = exe_prefix + [username, "--print-found", "--timeout", "15"]
         sse_put(task_id, "log", {"line": f"CMD: {' '.join(cmd)}"})
 
         url_pattern = re.compile(r"(https?://\S+)")
         try:
             for line in run_command_stream(cmd, cwd=cwd):
+                # adiciona links clicáveis (frontend renderiza apenas para sherlock)
                 line_with_links = url_pattern.sub(
                     r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>',
                     line,
@@ -269,6 +303,7 @@ def _vazamento_worker(task_id, email=None, password=None):
                 for line in run_command_stream(cmd):
                     sse_put(task_id, "log", {"line": line})
                     stripped = line.strip()
+                    # algumas versões do holehe emitem JSON por linha
                     if stripped.startswith("{") and stripped.endswith("}"):
                         try:
                             obj = json.loads(stripped)
@@ -306,33 +341,42 @@ def _metaweb_worker(task_id, file_path=None, target=None):
                 sse_put(task_id, "result", {"type": "file", "data": info})
             except Exception as e:
                 sse_put(task_id, "log", {"line": f"Erro ao calcular hashes: {e}"})
-# --- exiftool ---
+
+            # --- exiftool ---
             try:
                 for line in run_command_stream(["exiftool", file_path]):
                     sse_put(task_id, "log", {"line": line})
+            except FileNotFoundError:
+                sse_put(task_id, "log", {"line": "exiftool indisponível."})
             except Exception:
-                sse_put(task_id, "log", {"line": "exiftool indisponível ou erro."})
+                sse_put(task_id, "log", {"line": "exiftool erro."})
 
             # --- mediainfo ---
             try:
                 for line in run_command_stream(["mediainfo", file_path]):
                     sse_put(task_id, "log", {"line": line})
+            except FileNotFoundError:
+                sse_put(task_id, "log", {"line": "mediainfo indisponível."})
             except Exception:
-                sse_put(task_id, "log", {"line": "mediainfo indisponível ou erro."})
+                sse_put(task_id, "log", {"line": "mediainfo erro."})
 
             # --- file ---
             try:
                 for line in run_command_stream(["file", "-b", file_path]):
                     sse_put(task_id, "log", {"line": line})
-            except Exception:
+            except FileNotFoundError:
                 sse_put(task_id, "log", {"line": "utilitário 'file' indisponível."})
+            except Exception:
+                sse_put(task_id, "log", {"line": "utilitário 'file' erro."})
 
             # --- pdfinfo ---
             try:
                 for line in run_command_stream(["pdfinfo", file_path]):
                     sse_put(task_id, "log", {"line": "[PDF] " + line})
+            except FileNotFoundError:
+                sse_put(task_id, "log", {"line": "pdfinfo indisponível."})
             except Exception:
-                sse_put(task_id, "log", {"line": "pdfinfo indisponível ou não é PDF."})
+                sse_put(task_id, "log", {"line": "pdfinfo erro ou não é PDF."})
 
             # --- pdfminer.six (extração de texto) ---
             try:
@@ -359,27 +403,34 @@ def _metaweb_worker(task_id, file_path=None, target=None):
             try:
                 for line in run_command_stream(["hachoir-metadata", file_path]):
                     sse_put(task_id, "log", {"line": "[Hachoir] " + line})
+            except FileNotFoundError:
+                sse_put(task_id, "log", {"line": "hachoir-metadata indisponível."})
             except Exception:
-                sse_put(task_id, "log", {"line": "hachoir-metadata indisponível ou erro."})
+                sse_put(task_id, "log", {"line": "hachoir-metadata erro."})
 
             # --- ffprobe ---
             try:
                 for line in run_command_stream(["ffprobe", "-i", file_path, "-hide_banner"]):
                     sse_put(task_id, "log", {"line": "[FFPROBE] " + line})
+            except FileNotFoundError:
+                sse_put(task_id, "log", {"line": "ffprobe indisponível."})
             except Exception:
-                sse_put(task_id, "log", {"line": "ffprobe indisponível ou não é mídia."})
+                sse_put(task_id, "log", {"line": "ffprobe erro ou não é mídia."})
 
             # --- strings (limitado) ---
             try:
+                # executa via bash -c para pipes
                 for line in run_command_stream(["bash", "-c", f"strings -n 6 -a {file_path} | head -n 200"]):
                     sse_put(task_id, "log", {"line": "[STRINGS] " + line})
-            except Exception:
+            except FileNotFoundError:
                 sse_put(task_id, "log", {"line": "utilitário 'strings' indisponível."})
+            except Exception:
+                sse_put(task_id, "log", {"line": "strings erro."})
 
         elif target:
             host = safe_domain(target)
             sse_put(task_id, "log", {"line": f"Consulta de alvo: {host}"})
-            # Mantém DNS, WHOIS, HTTP checks...
+            # aqui você pode adicionar checks adicionais (whois, http, etc.)
         else:
             sse_put(task_id, "log", {"line": "Nenhum arquivo nem target fornecido."})
 
@@ -449,4 +500,5 @@ def create_app():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.logger.info("Starting app on port %s", port)
+    # debug False para produção; se precisar de reload, altere localmente
     app.run(host="0.0.0.0", port=port, debug=False)
