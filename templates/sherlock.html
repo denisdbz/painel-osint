@@ -1,13 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="card">
+<section class="card" style="max-width:980px;margin:16px auto;display:flex;flex-direction:column;gap:12px;">
   <h2>Sherlock</h2>
-  <form id="sherlock-form" onsubmit="return false;">
-    <label>Usuário</label>
-    <input type="text" id="sherlock-username" placeholder="ex.: johndoe" required />
-    <button id="btn-sherlock">Iniciar</button>
+  <form id="sherlock-form" style="display:flex;gap:8px;flex-wrap:wrap;">
+    <label style="flex:1 1 200px">Usuário
+      <input type="text" id="sherlock-username" placeholder="ex.: johndoe" required style="width:100%;"/>
+    </label>
+    <div style="align-self:center;">
+      <button type="submit">Iniciar</button>
+    </div>
   </form>
-  <div class="progress"><div id="pg-sherlock" class="bar"></div></div>
-  <pre id="out-sherlock" class="output"></pre>
+
+  <div style="display:flex;gap:12px;flex-direction:column;">
+    <div style="height:8px;background:#0b1220;border-radius:4px;overflow:hidden;">
+      <div id="pg-sherlock" class="bar" style="height:100%;width:0%;background:linear-gradient(90deg,#2ee6a5,#39b7ff)"></div>
+    </div>
+
+
+
+<div id="out-sherlock" class="output" 
+     style="background:#0f1724;color:#dbeafe;padding:12px;border-radius:8px;max-height:520px;overflow:auto;white-space:pre-wrap;word-break:break-word;">
+</div>
+
+
+  </div>
 </section>
 {% endblock %}

@@ -1,75 +1,200 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-    // Submissão Sherlock
-    const sherlockForm = document.getElementById("sherlock-form");
-    if (sherlockForm) {
-        sherlockForm.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const username = document.getElementById("sherlock-username").value;
-            const res = await fetch("/sherlock/start", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams({ username })
-            });
+  function setProgress(id, val) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    val = Math.max(0, Math.min(100, val)); // garante 0-100
+    el.style.width = val + "%";
+    el.textContent = val + "%"; // opcional: mostrar percentual
+  }
 
-            const data = await res.json();
-            startSSE("sherlock", data.task_id, "out-sherlock");
-        });
+  function appendOut(tool, text) {
+    const out = document.getElementById(`out-${tool}`);
+    if (!out) return;
+
+    // Corrige Sherlock para links clicáveis
+    if (tool === "sherlock") {
+        out.innerHTML += text + "<br>";
+    } else {
+        out.textContent += text + "\n";
     }
 
-    // Submissão Holehe
-    const vazamentoForm = document.getElementById("vazamento-form");
-    if (vazamentoForm) {
-        vazamentoForm.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const email = document.getElementById("vazamento-email").value;
+    out.scrollTop = out.scrollHeight;
+  }
 
-            const res = await fetch("/vazamento/start", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams({ email })
-            });
+  function startSSE(tool, task_id) {
+    const out = document.getElementById(`out-${tool}`);
+    if (out) out.textContent = "";
+    const progressEl = document.getElementById(`pg-${tool}`);
+    let progress = 0;
 
-            const data = await res.json();
-            startSSE("vazamento", data.task_id, "out-vazamento");
-        });
+    const es = new EventSource(`/sse/${tool}/${task_id}`);
+
+    function advanceProgress(increment = 1) {
+      if (!progressEl) return;
+      progress = Math.min(95, progress + increment); // nunca passa 95 até receber 'done'
+      setProgress(`pg-${tool}`, progress);
     }
 
-    // Submissão Metaweb (UPLOAD)
-    const metawebForm = document.getElementById("metaweb-form");
-    if (metawebForm) {
-        metawebForm.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const fileInput = document.getElementById("metaweb-file");
-            if (!fileInput.files.length) {
-                alert("Selecione um arquivo para enviar!");
-                return;
-            }
+    es.addEventListener("log", (evt) => {
+      try {
+        const d = JSON.parse(evt.data);
+        appendOut(tool, d.line || JSON.stringify(d));
+      } catch (e) {
+        appendOut(tool, evt.data);
+      }
+      advanceProgress(1);
+    });
 
-            const formData = new FormData();
-            formData.append("file", fileInput.files[0]);
+    es.addEventListener("status", (evt) => {
+      try {
+        const d = JSON.parse(evt.data);
+        appendOut(tool, "[STATUS] " + (d.msg || JSON.stringify(d)));
+      } catch (e) {
+        appendOut(tool, "[STATUS] " + evt.data);
+      }
+      advanceProgress(2);
+    });
 
-            const res = await fetch("/metaweb/start", {
-                method: "POST",
-                body: formData
-            });
+    es.addEventListener("result", (evt) => {
+      try {
+        const d = JSON.parse(evt.data);
+        appendOut(tool, "[RESULT] " + JSON.stringify(d));
+      } catch (e) {
+        appendOut(tool, "[RESULT] " + evt.data);
+      }
+      advanceProgress(3);
+    });
 
-            const data = await res.json();
-            startSSE("metaweb", data.task_id, "out-metaweb");
-        });
+    es.addEventListener("done", (evt) => {
+      try {
+        const d = JSON.parse(evt.data);
+        appendOut(tool, "[DONE] " + (d.ok ? "ok" : JSON.stringify(d)));
+      } catch (e) {
+        appendOut(tool, "[DONE] " + evt.data);
+      }
+      setProgress(`pg-${tool}`, 100);
+      es.close();
+    });
+
+    es.addEventListener("error", (evt) => {
+      try {
+        const d = JSON.parse(evt.data);
+        appendOut(tool, "[ERROR] " + (d.msg || JSON.stringify(d)));
+      } catch (e) {
+        appendOut(tool, "[ERROR] " + evt.data);
+      }
+      es.close();
+    });
+
+    es.addEventListener("ping", () => {
+      // opcional: poderia avançar lentamente a barra se quiser
+    });
+
+    return es;
+  }
+
+  // SHERLOCK
+  const sherlockForm = document.getElementById("sherlock-form");
+  if (sherlockForm) {
+    sherlockForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const username = document.getElementById("sherlock-username").value.trim();
+      if (!username) return alert("Informe um usuário.");
+      setProgress("pg-sherlock", 5);
+      const res = await fetch("/sherlock/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ username })
+      });
+      const data = await res.json();
+      startSSE("sherlock", data.task_id);
+    });
+  }
+
+// VAZAMENTO
+const vazForm = document.getElementById("vazamento-form");
+if (vazForm) {
+  vazForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const emailEl = document.getElementById("vazamento-email");
+    const passEl = document.getElementById("vazamento-password");
+    const email = emailEl ? emailEl.value.trim() : "";
+    const password = passEl ? passEl.value : "";
+
+    if (!email && !password) return alert("Informe e-mail ou senha.");
+
+    setProgress("pg-vazamento", 5);
+
+    const body = new URLSearchParams();
+    if (email) body.append("email", email);
+    if (password) body.append("password", password);
+
+    const res = await fetch("/vazamento/start", { 
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body
+    });
+
+    const data = await res.json();
+
+    // SSE customizado para vazamento
+    const out = document.getElementById("out-vazamento");
+    if (out) out.innerHTML = ""; // limpa saída
+
+    const es = startSSE("vazamento", data.task_id);
+
+    // Substitui appendOut por appendVazamento
+    es.addEventListener("log", (evt) => {
+      try {
+        const d = JSON.parse(evt.data);
+        appendVazamento(d.line || JSON.stringify(d));
+      } catch (err) {
+        appendVazamento(evt.data);
+      }
+    });
+  });
+}
+
+// Função appendVazamento com cores e links clicáveis
+function appendVazamento(text) {
+  const out = document.getElementById("out-vazamento");
+  if (!out) return;
+
+  let formatted = text;
+
+  if (text.startsWith("[+]")) {
+    const urlMatch = text.match(/https?:\/\/\S+/);
+    if (urlMatch) {
+      formatted = `<span style="color:#2ee6a5;font-weight:bold;">[+] <a href="${urlMatch[0]}" target="_blank" rel="noopener noreferrer">${urlMatch[0]}</a></span>`;
+    } else {
+      formatted = `<span style="color:#2ee6a5;font-weight:bold;">${text}</span>`;
     }
+  } else if (text.startsWith("[-]")) {
+    formatted = `<span style="color:#ff3860;">${text}</span>`;
+  } else if (text.startsWith("[x]")) {
+    formatted = `<span style="color:#f3c623;">${text}</span>`;
+  }
 
-    // Função para receber logs em tempo real
-    function startSSE(tool, task_id, outputId) {
-        const logBox = document.getElementById(outputId);
-        logBox.innerHTML = "";
+  out.innerHTML += formatted + "<br/>";
+  out.scrollTop = out.scrollHeight;
+}
 
-        const evtSource = new EventSource(`/sse/${tool}/${task_id}`);
-        evtSource.onmessage = (event) => {
-            const line = document.createElement("div");
-            line.textContent = event.data;
-            logBox.appendChild(line);
-            logBox.scrollTop = logBox.scrollHeight;
-        };
-    }
+  // METAWEB
+  const metaForm = document.getElementById("metaweb-form");
+  if (metaForm) {
+    metaForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("metaweb-file");
+      if (!input || !input.files || !input.files[0]) return alert("Selecione um arquivo.");
+      setProgress("pg-metaweb", 5);
+      const fd = new FormData();
+      fd.append("file", input.files[0]);
+      const res = await fetch("/metaweb/start", { method: "POST", body: fd });
+      const data = await res.json();
+      startSSE("metaweb", data.task_id);
+    });
+  }
+
 });
