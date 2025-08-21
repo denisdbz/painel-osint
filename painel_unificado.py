@@ -56,6 +56,15 @@ app.logger.addHandler(handler)
 # =====================================================
 # 📱 PhoneInfoga
 # =====================================================
+def detect_phoneinfoga():
+    # tenta binário local
+    bin_path = "/usr/local/bin/phoneinfoga"
+    if os.path.isfile(bin_path):
+        return [bin_path], "bin"
+    # tenta módulo Python
+    return [sys.executable, "-m", "phoneinfoga"], "module"
+
+
 @app.route("/phoneinfoga", methods=["GET", "POST"])
 def phoneinfoga():
     if request.method == "POST":
@@ -68,12 +77,16 @@ def phoneinfoga():
         json_path = os.path.join(pasta_relatorios, f"phoneinfoga_{numero}.json")
 
         try:
-result = subprocess.run(
-    ["/usr/local/bin/phoneinfoga", "scan", "-n", numero, "-o", json_path, "-f", "json"],
-    capture_output=True,
-    text=True,
-    timeout=120
-)
+            cmd_prefix, _how = detect_phoneinfoga()
+            cmd = cmd_prefix + ["scan", "-n", numero, "-o", json_path, "-f", "json"]
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
             if result.returncode != 0:
                 return render_template("phoneinfoga.html", erro=f"Erro ao executar PhoneInfoga: {result.stderr}")
 
@@ -101,10 +114,14 @@ result = subprocess.run(
 
             return render_template("relatorio_phoneinfoga.html", numero=numero, dados=dados)
 
+        except FileNotFoundError:
+            return render_template("phoneinfoga.html", erro="PhoneInfoga não encontrado no ambiente.")
         except Exception as e:
             return render_template("phoneinfoga.html", erro=f"Ocorreu um erro: {str(e)}")
 
     return render_template("phoneinfoga.html")
+
+
 # -------------------
 # SQLite (history)
 # -------------------
@@ -130,11 +147,6 @@ def init_db():
     conn.close()
 
 def record_history(task_id, tool, params_dict, result_dict, raw_output, status="ok"):
-    """
-    Insere um registro de histórico no DB.
-    - params_dict e result_dict são armazenados como JSON strings.
-    - raw_output é truncado para MAX_OUTPUT_CHARS.
-    """
     try:
         init_db()
         ro = raw_output or ""
@@ -162,10 +174,6 @@ def record_history(task_id, tool, params_dict, result_dict, raw_output, status="
         app.logger.exception("failed to record history")
 
 def save_history(tool, params=None, result=None, raw_output=None, status="started", task_id=None):
-    """
-    Snapshot inicial (ou genérico) no histórico.
-    Reaproveita o task_id se recebido, senão cria um novo e retorna.
-    """
     if task_id is None:
         task_id = str(uuid.uuid4())
     record_history(
@@ -228,10 +236,7 @@ def start_task():
     return task_id
 
 def end_task(task_id):
-    # deixa o worker emitir "done" / "error". Aqui só aguardamos um instante.
     time.sleep(0.2)
-    # NÃO removemos a fila aqui para não quebrar quem ainda está drenando os últimos eventos.
-    # A remoção segura acontece no finally do sse_stream.
     app.logger.info("end_task %s", task_id)
 
 def sse_put(task_id, event, data):
@@ -243,11 +248,6 @@ def sse_put(task_id, event, data):
     q.put(payload)
 
 def sse_stream(task_id):
-    """
-    - Encerra o stream automaticamente quando receber 'event: done' ou 'event: error'.
-    - Envia ping direto ao cliente (sem passar por fila) caso não haja mensagens.
-    - Faz cleanup do streams[task_id] com segurança no finally.
-    """
     q = streams.get(task_id)
     if q is None:
         yield "event: error\n" + "data: " + json.dumps({"msg": "task_not_found"}) + "\n\n"
@@ -257,15 +257,12 @@ def sse_stream(task_id):
         while True:
             try:
                 chunk = q.get(timeout=0.25)
-                # repassa ao cliente
                 yield chunk
-                # se o worker sinalizou término/erro, encerra o SSE
                 if chunk.startswith("event: done") or chunk.startswith("event: error"):
                     break
             except queue.Empty:
                 now = time.time()
                 if now - last_ping > 15:
-                    # heartbeat direto para o cliente, independente do estado da fila
                     yield "event: ping\n" + "data: " + json.dumps({"t": now}) + "\n\n"
                     last_ping = now
     except GeneratorExit:
@@ -273,7 +270,6 @@ def sse_stream(task_id):
     except Exception:
         app.logger.exception("sse_stream exception")
     finally:
-        # limpeza segura: remove a fila associada (se ainda existir)
         streams.pop(task_id, None)
         app.logger.debug("sse_stream finished for %s", task_id)
 
@@ -385,7 +381,6 @@ def _sherlock_worker(task_id, username):
                     line,
                 )
                 lines.append(line_with_links)
-                # estimate found items (simple heuristic: lines with http)
                 if "http" in line.lower():
                     found_count += 1
                 sse_put(task_id, "log", {"line": line_with_links})
@@ -414,7 +409,6 @@ def _sherlock_worker(task_id, username):
 
         sse_put(task_id, "result", {"type": "sherlock_summary", "found": found_count})
         sse_put(task_id, "done", {"ok": True})
-        # grava histórico
         record_history(
             task_id,
             "sherlock",
@@ -499,12 +493,11 @@ def _vazamento_worker(task_id, email=None, password=None):
                 )
         elif email:
             sse_put(task_id, "status", {"phase": "starting", "msg": "Rodando checagem de vazamento (holehe)"})
-            exe_prefix, how = detect_executable("holehe", script_name=None)
+            exe_prefix, _how = detect_executable("holehe", script_name=None)
             cmd = exe_prefix + [email]
             sse_put(task_id, "log", {"line": f"CMD: {' '.join(cmd)}"})
             try:
                 for line in run_command_stream(cmd):
-                    # ignora linhas que são só porcentagem
                     if re.fullmatch(r"\d{1,3}%", line.strip()):
                         continue
                     line_with_links = url_pattern.sub(
@@ -514,7 +507,6 @@ def _vazamento_worker(task_id, email=None, password=None):
                     lines.append(line_with_links)
                     sse_put(task_id, "log", {"line": line_with_links})
                     stripped = line.strip()
-                    # tenta detectar JSON linha única do holehe
                     if stripped.startswith("{") and stripped.endswith("}"):
                         try:
                             obj = json.loads(stripped)
@@ -545,7 +537,6 @@ def _vazamento_worker(task_id, email=None, password=None):
                 return
 
             sse_put(task_id, "done", {"ok": True})
-            # grava histórico com output (truncado internamente)
             record_history(
                 task_id,
                 "vazamento_holehe",
@@ -630,7 +621,6 @@ def _metaweb_worker(task_id, file_path=None, target=None):
         elif target:
             host = safe_domain(target)
             sse_put(task_id, "log", {"line": f"Consulta de alvo: {host}"})
-            # você pode adicionar checks adicionais (whois, http, etc.)
             lines.append(f"target: {host}")
             sse_put(task_id, "done", {"ok": True})
             record_history(
@@ -691,7 +681,6 @@ def sse(tool, task_id):
     headers = {
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
-        # "Connection": "keep-alive",  # opcional, alguns proxies adicionam automaticamente
     }
     return Response(
         stream_with_context(sse_stream(task_id)),
@@ -729,7 +718,6 @@ def sherlock_start():
 
     task_id = start_task()
 
-    # snapshot inicial no histórico
     save_history(
         tool="sherlock",
         params={"username": username},
@@ -751,14 +739,12 @@ def vazamento_start():
 
     task_id = start_task()
 
-    # Decide o "tool" mais específico conforme o parâmetro
     tool_name = (
         "vazamento_password"
         if password and not email
         else ("vazamento_holehe" if email and not password else "vazamento")
     )
 
-    # snapshot inicial (sem vazar senha)
     snapshot_params = {}
     if email:
         snapshot_params["email"] = email
@@ -797,7 +783,6 @@ def metaweb_start():
 
     task_id = start_task()
 
-    # snapshot inicial
     if file_path:
         save_history(
             tool="metaweb_file",
@@ -841,7 +826,6 @@ def healthz():
 
 def check_admin_token():
     token_env = os.environ.get("ADMIN_TOKEN", "changeme")
-    # aceita token via header X-Admin-Token ou query param ?token=...
     token_req = request.headers.get("X-Admin-Token") or request.args.get("token")
     if not token_req or token_req != token_env:
         return False
@@ -850,10 +834,8 @@ def check_admin_token():
 @app.route("/admin/history")
 def admin_history_page():
     if not check_admin_token():
-        # não expor nada se token incorreto
         return abort(401)
     rows = fetch_history(limit=500)
-    # HTML simples — você pode melhorar o template se quiser
     html = [
         "<html><head><meta charset='utf-8'><title>Histórico</title>"
         "<style>body{background:#0b0f14;color:#cde; font-family:Inter,Segoe UI,Helvetica,Arial;} "
@@ -894,7 +876,6 @@ def admin_history_json():
     rows = fetch_history(limit=limit)
     return jsonify(rows)
 
-# CORREÇÃO: rota correta com <int:hid>
 @app.route("/admin/history/<int:hid>/download")
 def admin_history_download(hid):
     if not check_admin_token():
@@ -923,5 +904,4 @@ if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", 10000))
     app.logger.info("Starting app on port %s", port)
-    # debug False para produção
     app.run(host="0.0.0.0", port=port, debug=False)
