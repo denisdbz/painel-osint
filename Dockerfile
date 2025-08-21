@@ -14,10 +14,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     wget \
+    unzip \
     python3-pip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Diretórios do projeto
+# =====================================================
+# 📱 Instala PhoneInfoga (última versão release)
+# =====================================================
+RUN wget https://github.com/sundowndev/phoneinfoga/releases/latest/download/phoneinfoga_Linux_x86_64.zip \
+    && unzip phoneinfoga_Linux_x86_64.zip -d /usr/local/bin \
+    && chmod +x /usr/local/bin/phoneinfoga \
+    && rm phoneinfoga_Linux_x86_64.zip
+
+# Diretório de trabalho do projeto
 WORKDIR /app
 RUN mkdir uploads runs tools
 
