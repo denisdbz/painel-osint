@@ -175,8 +175,10 @@ def start_task():
     return task_id
 
 def end_task(task_id):
+    # deixa o worker emitir "done" / "error". Aqui só aguardamos um instante.
     time.sleep(0.2)
-    streams.pop(task_id, None)
+    # NÃO removemos a fila aqui para não quebrar quem ainda está drenando os últimos eventos.
+    # A remoção segura acontece no finally do sse_stream.
     app.logger.info("end_task %s", task_id)
 
 def sse_put(task_id, event, data):
@@ -188,6 +190,11 @@ def sse_put(task_id, event, data):
     q.put(payload)
 
 def sse_stream(task_id):
+    """
+    - Encerra o stream automaticamente quando receber 'event: done' ou 'event: error'.
+    - Envia ping direto ao cliente (sem passar por fila) caso não haja mensagens.
+    - Faz cleanup do streams[task_id] com segurança no finally.
+    """
     q = streams.get(task_id)
     if q is None:
         yield "event: error\n" + "data: " + json.dumps({"msg": "task_not_found"}) + "\n\n"
@@ -197,18 +204,25 @@ def sse_stream(task_id):
         while True:
             try:
                 chunk = q.get(timeout=0.25)
+                # repassa ao cliente
                 yield chunk
+                # se o worker sinalizou término/erro, encerra o SSE
+                if chunk.startswith("event: done") or chunk.startswith("event: error"):
+                    break
             except queue.Empty:
                 now = time.time()
                 if now - last_ping > 15:
-                    sse_put(task_id, "ping", {"t": now})
+                    # heartbeat direto para o cliente, independente do estado da fila
+                    yield "event: ping\n" + "data: " + json.dumps({"t": now}) + "\n\n"
                     last_ping = now
     except GeneratorExit:
         app.logger.debug("SSE client disconnected")
     except Exception:
         app.logger.exception("sse_stream exception")
     finally:
-        app.logger.debug("sse_stream finished")
+        # limpeza segura: remove a fila associada (se ainda existir)
+        streams.pop(task_id, None)
+        app.logger.debug("sse_stream finished for %s", task_id)
 
 # -------------------
 # Helpers
@@ -575,7 +589,7 @@ def _metaweb_worker(task_id, file_path=None, target=None):
                 status="ok",
             )
         else:
-            sse_put(task_id, "log", {"line": "Nenhum arquivo nem target fornecido."})
+            sse_put(task_id, "error", {"msg": "Nenhum arquivo nem target fornecido."})
             record_history(
                 task_id,
                 "metaweb",
@@ -624,6 +638,7 @@ def sse(tool, task_id):
     headers = {
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
+        # "Connection": "keep-alive",  # opcional, alguns proxies adicionam automaticamente
     }
     return Response(
         stream_with_context(sse_stream(task_id)),
