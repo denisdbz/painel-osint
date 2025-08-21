@@ -95,7 +95,10 @@ def phoneinfoga():
             )
 
             if result.returncode != 0:
-                return render_template("phoneinfoga.html", erro=f"Erro ao executar PhoneInfoga: {result.stderr}")
+                return render_template(
+                    "phoneinfoga.html", 
+                    erro=f"Erro ao executar PhoneInfoga: {result.stderr}"
+                )
 
             output = result.stdout.strip()
 
@@ -104,37 +107,26 @@ def phoneinfoga():
             except json.JSONDecodeError:
                 dados = {"raw_output": output}
 
-            with open(json_path, "w") as f:
+            # salvar relatório
+            with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(dados, f, indent=2, ensure_ascii=False)
 
-            historico_entry = {
-                "tipo": "phoneinfoga",
-                "alvo": numero,
-                "arquivo": json_path,
-                "data": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
+            # 🔎 extrair links com regex
+            raw_text = json.dumps(dados, ensure_ascii=False)
+            links = re.findall(r'https?://[^\s"\'<>]+', raw_text)
 
-            historico_file = os.path.join(pasta_relatorios, "historico.json")
-            if os.path.exists(historico_file):
-                with open(historico_file, "r") as f:
-                    historico = json.load(f)
-            else:
-                historico = []
+            return render_template(
+                "relatorio_phoneinfoga.html",
+                numero=numero,
+                dados=dados,
+                links=links
+            )
 
-            historico.append(historico_entry)
-
-            with open(historico_file, "w") as f:
-                json.dump(historico, f, indent=2, ensure_ascii=False)
-
-            return render_template("relatorio_phoneinfoga.html", numero=numero, dados=dados)
-
-        except FileNotFoundError:
-            return render_template("phoneinfoga.html", erro="PhoneInfoga não encontrado no ambiente.")
         except Exception as e:
-            return render_template("phoneinfoga.html", erro=f"Ocorreu um erro: {str(e)}")
+            return render_template("phoneinfoga.html", erro=str(e))
 
+    # GET
     return render_template("phoneinfoga.html")
-
 
 
 # -------------------
