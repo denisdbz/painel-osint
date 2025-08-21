@@ -1,29 +1,52 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container">
-  <h2 class="text-xl font-bold mb-4">📱 Resultado PhoneInfoga - {{ numero }}</h2>
+<div class="container mt-4">
+  <h2 class="mb-4">📱 Resultado PhoneInfoga - {{ numero }}</h2>
 
-  {% if links and links|length > 0 %}
-    <div class="bg-gray-900 p-4 rounded shadow text-white">
-      <h3 class="mb-2">🔎 Links encontrados:</h3>
-      <ul class="list-disc pl-5 space-y-1">
-        {% for link in links %}
-          <li>
-            <a href="{{ link }}" target="_blank" class="text-blue-400 hover:underline">{{ link }}</a>
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
+  {% if erro %}
+    <div class="alert alert-danger">{{ erro }}</div>
   {% else %}
-    <p class="text-red-400">Nenhum link encontrado.</p>
+
+    {% if links and links|length > 0 %}
+      <div class="card bg-dark text-light shadow rounded-3 mb-4">
+        <div class="card-body">
+          <h4 class="mb-3">🔎 Links encontrados:</h4>
+          <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle">
+              <thead>
+                <tr>
+                  <th scope="col">Link</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for link in links %}
+                  <tr>
+                    <td>
+                      <a href="{{ link }}" target="_blank" class="text-info text-break">
+                        {{ link }}
+                      </a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="alert alert-warning">Nenhum link encontrado.</div>
+    {% endif %}
+
+    <div class="card bg-dark text-light shadow rounded-3">
+      <div class="card-body">
+        <h4 class="mb-3">📄 Detalhes brutos</h4>
+        <details>
+          <summary class="mb-2">Clique para expandir</summary>
+          <pre class="bg-black text-light p-3 rounded overflow-auto" style="max-height: 400px; white-space: pre-wrap; word-wrap: break-word;">{{ dados | tojson(indent=2, ensure_ascii=False) }}</pre>
+        </details>
+      </div>
+    </div>
+
   {% endif %}
-
-  <details class="mt-4">
-    <summary class="cursor-pointer text-gray-400">📂 Ver JSON bruto</summary>
-    <pre class="whitespace-pre-wrap text-sm bg-gray-800 p-3 rounded mt-2">{{ dados | tojson(indent=2) }}</pre>
-  </details>
-
-  <a href="{{ url_for('phoneinfoga') }}" 
-     class="text-blue-400 hover:underline mt-4 block">🔙 Nova consulta</a>
 </div>
 {% endblock %}
