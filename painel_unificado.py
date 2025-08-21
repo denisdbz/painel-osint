@@ -14,7 +14,7 @@ import logging
 import threading
 import subprocess
 import sqlite3
-from datetime import datetime
+from datetime import datetime, UTC
 from urllib.parse import urlparse
 from pathlib import Path
 from werkzeug.utils import secure_filename
@@ -177,7 +177,7 @@ def record_history(task_id, tool, params_dict, result_dict, raw_output, status="
                 json.dumps(result_dict, ensure_ascii=False),
                 ro,
                 status,
-                datetime.utcnow().isoformat() + "Z",
+                datetime.now(UTC).isoformat(),
             ),
         )
         conn.commit()
@@ -305,47 +305,38 @@ def safe_domain(input_str):
     return host
 
 
-def run_command_stream(cmd_list, cwd=None, env=None):
-    try:
-        cmd_str = " ".join(cmd_list) if isinstance(cmd_list, (list, tuple)) else str(cmd_list)
-    except Exception:
-        cmd_str = str(cmd_list)
-    app.logger.info("run_command_stream: %s", cmd_str)
-
+def run_command_stream(cmd, cwd=None, env=None):
+    """
+    Executa um comando externo e streama stdout e stderr em tempo real.
+    """
     try:
         proc = subprocess.Popen(
-            cmd_list,
-            cwd=cwd or BASE_DIR,
-            env=env or os.environ.copy(),
+            cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            universal_newlines=True,
+            stderr=subprocess.PIPE,
+            text=True
         )
-    except FileNotFoundError:
-        raise
 
-    try:
-        for raw in iter(proc.stdout.readline, ""):
-            if raw is None:
-                break
-            line = raw.rstrip("\r\n")
-            if not line.strip():
-                continue
-            yield line
-        try:
-            proc.stdout.close()
-        except Exception:
-            pass
+        # Lê stdout e stderr em tempo real, combinando a saída
+        for line in iter(lambda: proc.stdout.readline() + proc.stderr.readline(), ""):
+            if line:
+                app.logger.info(f"[CMD OUT] {line.strip()}")
+                yield line.strip()
+
+        proc.stdout.close()
+        proc.stderr.close()
         ret = proc.wait()
+
         if ret != 0:
-            raise subprocess.CalledProcessError(ret, cmd_str)
-    finally:
-        try:
-            proc.stdout.close()
-        except Exception:
-            pass
+            app.logger.error(f"Command {' '.join(cmd)} failed with exit code {ret}")
+            yield f"[error] Command failed with exit code {ret}"
+
+    except FileNotFoundError:
+        app.logger.error(f"Command not found: {cmd[0]}")
+        yield f"[error] Command not found: {cmd[0]}"
+    except Exception as e:
+        app.logger.exception(f"Exception in run_command_stream: {e}")
+        yield f"[exception] {str(e)}"
 
 
 def detect_executable(module_name, script_name=None):
@@ -374,7 +365,7 @@ def file_hashes(path):
     return {"size": size, "sha256": sha256.hexdigest(), "md5": md5.hexdigest()}
 
 # -------------------
-# Workers (cada worker acumula saída e grava histórico)
+# Workers
 # -------------------
 
 def _sherlock_worker(task_id, username):
@@ -382,80 +373,58 @@ def _sherlock_worker(task_id, username):
     found_count = 0
     try:
         sse_put(task_id, "status", {"phase": "starting", "msg": f"Iniciando análise com Sherlock para {username}"})
+        
+        # Tentativa de rodar de um venv ou global
+        cmd = ["/opt/render/project/src/.venv/bin/sherlock", username, "--print-found", "--timeout", "15"]
+        
+        # Verifica se o executável existe
+        if not os.path.exists(cmd[0]):
+            cmd = ["sherlock", username, "--print-found", "--timeout", "15"]
 
-        sherlock_dir = os.path.join(BASE_DIR, "tools", "sherlock")
-        local_main = os.path.join(sherlock_dir, "sherlock_project", "__main__.py")
-        cwd = sherlock_dir
-
-        if os.path.exists(local_main):
-            exe_prefix = [sys.executable, "-m", "sherlock_project.__main__"]
-            how = "local-main"
-        else:
-            exe_prefix, how = detect_executable("sherlock")
-            script_name = os.path.join("tools", "sherlock")
-
-        cmd = exe_prefix + [username, "--print-found", "--timeout", "15"]
-        sse_put(task_id, "status", {"phase": "running", "msg": f"Executando Sherlock via {how}"})
-
-        process = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-
-        for line in process.stdout:
-            line = line.strip()
-            if not line:
-                continue
-            lines.append(line)
+        # Usa a nova função de streaming
+        for line in run_command_stream(cmd):
             sse_put(task_id, "output", {"line": line})
             if "http" in line or "found" in line.lower():
                 found_count += 1
-
-        process.wait()
-
-        if process.returncode == 0:
-            sse_put(task_id, "status", {"phase": "finished", "msg": f"Análise concluída. {found_count} resultados encontrados."})
-        else:
-            sse_put(task_id, "status", {"phase": "error", "msg": f"Sherlock terminou com código {process.returncode}"})
+        
+        sse_put(task_id, "status", {"phase": "finished", "msg": f"Análise concluída. {found_count} resultados encontrados."})
 
     except Exception as e:
         sse_put(task_id, "status", {"phase": "error", "msg": str(e)})
 
-
-def _vazamento_worker(task_id, email=None, password=None):
+def _vazamento_worker(task_id, email, password=None):
     try:
-        sse_put(task_id, "status", {"phase": "starting", "msg": "Iniciando análise de vazamento"})
-
-        cmd = ["python3", "tools/holehe/holehe.py"]
-        if email:
-            cmd += ["--email", email]
-        if password:
-            cmd += ["--password", password]
-
+        sse_put(task_id, "status", {"phase": "starting", "msg": "Rodando Holehe (checagem de vazamentos)"})
+        cmd = ["/opt/render/project/src/.venv/bin/holehe", email]
         for line in run_command_stream(cmd):
             sse_put(task_id, "output", {"line": line})
-
-        sse_put(task_id, "status", {"phase": "finished", "msg": "Análise de vazamento finalizada"})
-
+        sse_put(task_id, "status", {"phase": "finished", "msg": "Holehe finalizado"})
     except Exception as e:
         sse_put(task_id, "status", {"phase": "error", "msg": str(e)})
-
 
 def _metaweb_worker(task_id, file_path=None, target=None):
     try:
         sse_put(task_id, "status", {"phase": "starting", "msg": "Iniciando análise com MetaWeb"})
-
         cmd = ["python3", "tools/metaweb/metaweb.py"]
         if file_path:
             cmd += ["--file", file_path]
         if target:
             cmd += ["--target", target]
-
         for line in run_command_stream(cmd):
             sse_put(task_id, "output", {"line": line})
-
         sse_put(task_id, "status", {"phase": "finished", "msg": "MetaWeb finalizado"})
-
     except Exception as e:
         sse_put(task_id, "status", {"phase": "error", "msg": str(e)})
 
+def _phoneinfoga_worker(task_id, number):
+    try:
+        sse_put(task_id, "status", {"phase": "starting", "msg": "Rodando PhoneInfoga"})
+        cmd = ["phoneinfoga", "scan", "-n", number]
+        for line in run_command_stream(cmd):
+            sse_put(task_id, "output", {"line": line})
+        sse_put(task_id, "status", {"phase": "finished", "msg": "PhoneInfoga finalizado"})
+    except Exception as e:
+        sse_put(task_id, "status", {"phase": "error", "msg": str(e)})
 
 # -------------------
 # Views / pages & SSE endpoint
@@ -614,6 +583,18 @@ def metaweb_start():
         kwargs={"task_id": task_id, "file_path": file_path, "target": (target or None)},
         daemon=True,
     )
+    th.start()
+    return jsonify({"task_id": task_id})
+
+
+@app.route("/phoneinfoga/start", methods=["POST"])
+def phoneinfoga_start():
+    numero = get_param_any(request, "numero")
+    if not numero:
+        return jsonify({"error": "numero_required"}), 400
+    task_id = start_task()
+    save_history(tool="phoneinfoga", params={"numero": numero}, status="started", task_id=task_id)
+    th = threading.Thread(target=_phoneinfoga_worker, args=(task_id, numero), daemon=True)
     th.start()
     return jsonify({"task_id": task_id})
 
