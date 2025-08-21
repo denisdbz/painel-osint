@@ -69,7 +69,7 @@ def phoneinfoga():
 
         try:
             result = subprocess.run(
-                ["usr/local/bin/phoneinfoga", "scan", "-n", numero, "-o", json_path, "-f", "json"],
+                ["/usr/local/bin/phoneinfoga", "scan", "-n", numero, "-o", json_path, "-f", "json"],
                 capture_output=True,
                 text=True,
                 timeout=120
