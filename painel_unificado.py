@@ -1,467 +1,257 @@
-#!/usr/bin/env python3
-# painel_unificado.py  -- Versão robusta para Render (SSE + ferramentas)
 import os
-import sys
-import re
+import subprocess
 import json
 import uuid
-import time
-import queue
-import shutil
 import hashlib
-import logging
+import time
+import sqlite3
 import threading
-import subprocess
-from urllib.parse import urlparse
-from pathlib import Path
+import shlex
+import shutil
+import io
+from flask import (
+    Flask, request, jsonify, Response, send_file, abort, make_response
+)
 from werkzeug.utils import secure_filename
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context
-from flask_cors import CORS
+from datetime import datetime
 
-# ----------------------
-# Config / paths
-# ----------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-RUNS_DIR = os.path.join(BASE_DIR, "runs")
+app = Flask(__name__)
+
+UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(RUNS_DIR, exist_ok=True)
 
-# Flask app
-app = Flask(__name__, static_folder="static", template_folder="templates")
-CORS(app)
+DB_PATH = "history.db"
 
-# logging
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter("[%(levelname)s] %(asctime)s %(message)s"))
-app.logger.setLevel(logging.INFO)
-app.logger.addHandler(handler)
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        """CREATE TABLE IF NOT EXISTS history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            task_id TEXT,
+            tool TEXT,
+            params TEXT,
+            result TEXT,
+            raw_output TEXT,
+            status TEXT
+        )"""
+    )
+    conn.commit()
+    conn.close()
 
-# -------------------
-# SSE infra
-# -------------------
-streams = {}  # task_id -> queue.Queue()
+init_db()
 
-def start_task():
-    task_id = str(uuid.uuid4())
-    streams[task_id] = queue.Queue()
-    app.logger.info("start_task %s", task_id)
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "changeme")
+
+# ------------------ utilitários ------------------
+def check_admin_token():
+    token = request.args.get("token")
+    return token == ADMIN_TOKEN
+
+def record_history(task_id, tool, params_dict, result_dict, raw_output, status):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    ts = datetime.utcnow().isoformat()
+    c.execute(
+        "INSERT INTO history (timestamp, task_id, tool, params, result, raw_output, status) VALUES (?,?,?,?,?,?,?)",
+        (ts, task_id, tool, json.dumps(params_dict), json.dumps(result_dict), raw_output, status),
+    )
+    conn.commit()
+    conn.close()
+
+def save_history(tool, params=None, result=None, raw_output=None, status="queued", task_id=None):
+    if task_id is None:
+        task_id = str(uuid.uuid4())
+    record_history(
+        task_id=task_id,
+        tool=tool,
+        params_dict=(params or {}),
+        result_dict=(result or {}),
+        raw_output=(raw_output or ""),
+        status=status,
+    )
     return task_id
 
-def end_task(task_id):
-    time.sleep(0.2)
-    streams.pop(task_id, None)
-    app.logger.info("end_task %s", task_id)
+def fetch_history(limit=100):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, timestamp, task_id, tool, params, result, status FROM history ORDER BY id DESC LIMIT ?",
+        (limit,),
+    )
+    rows = c.fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        out.append({
+            "id": r[0],
+            "timestamp": r[1],
+            "task_id": r[2],
+            "tool": r[3],
+            "params": json.loads(r[4] or "{}"),
+            "result": json.loads(r[5] or "{}"),
+            "status": r[6],
+        })
+    return out
 
-def sse_put(task_id, event, data):
-    q = streams.get(task_id)
-    if not q:
-        app.logger.debug("sse_put: no stream %s", task_id)
-        return
-    payload = f"event: {event}\n" + "data: " + json.dumps(data, ensure_ascii=False) + "\n\n"
-    q.put(payload)
+def fetch_history_raw(hid):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT raw_output FROM history WHERE id=?", (hid,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else None
 
-def sse_stream(task_id):
-    q = streams.get(task_id)
-    if q is None:
-        yield 'event: error\n' + 'data: ' + json.dumps({"msg": "task_not_found"}) + '\n\n'
-        return
+TASKS = {}
+TASK_LOCK = threading.Lock()
+
+def start_task():
+    tid = str(uuid.uuid4())
+    with TASK_LOCK:
+        TASKS[tid] = {"status": "running", "messages": [], "result": None}
+    return tid
+
+def append_task_message(tid, msg):
+    with TASK_LOCK:
+        if tid in TASKS:
+            TASKS[tid]["messages"].append(msg)
+
+def finish_task(tid, result):
+    with TASK_LOCK:
+        if tid in TASKS:
+            TASKS[tid]["status"] = "done"
+            TASKS[tid]["result"] = result
+
+def task_status(tid):
+    with TASK_LOCK:
+        return TASKS.get(tid, None)
+
+def run_subprocess_with_sse(tid, cmd, cwd=None):
+    process = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, bufsize=1, universal_newlines=True, cwd=cwd
+    )
+    lines = []
+    for line in process.stdout:
+        line = line.rstrip()
+        lines.append(line)
+        append_task_message(tid, line)
+    process.wait()
+    return "\n".join(lines), process.returncode
+
+def get_param_any(req, key):
+    val = req.form.get(key) or req.args.get(key)
+    if val:
+        return val
     try:
-        last_ping = 0
-        while True:
-            try:
-                chunk = q.get(timeout=0.25)
-                yield chunk
-            except queue.Empty:
-                now = time.time()
-                if now - last_ping > 15:
-                    sse_put(task_id, "ping", {"t": now})
-                    last_ping = now
-    except GeneratorExit:
-        app.logger.debug("SSE client disconnected")
+        js = req.get_json(force=True, silent=True)
+        if js and key in js:
+            return js[key]
     except Exception:
-        app.logger.exception("sse_stream exception")
-    finally:
-        app.logger.debug("sse_stream finished")
+        pass
+    return None
 
-# -------------------
-# Helpers
-# -------------------
-def safe_domain(input_str):
-    parsed = urlparse(input_str if re.match(r"^https?://", input_str) else f"http://{input_str}")
-    host = parsed.hostname or input_str
-    return host
+# ------------------- Rotas -------------------
 
-def run_command_stream(cmd_list, cwd=None, env=None):
-    try:
-        cmd_str = " ".join(cmd_list) if isinstance(cmd_list, (list, tuple)) else str(cmd_list)
-    except Exception:
-        cmd_str = str(cmd_list)
-    app.logger.info("run_command_stream: %s", cmd_str)
-
-    try:
-        proc = subprocess.Popen(
-            cmd_list,
-            cwd=cwd or BASE_DIR,
-            env=env or os.environ.copy(),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            universal_newlines=True,
-        )
-    except FileNotFoundError:
-        raise
-
-    try:
-        for raw in iter(proc.stdout.readline, ""):
-            if raw is None:
-                break
-            line = raw.rstrip("\r\n")
-            if not line.strip():
-                continue
-            yield line
-        try:
-            proc.stdout.close()
-        except Exception:
-            pass
-        ret = proc.wait()
-        if ret != 0:
-            raise subprocess.CalledProcessError(ret, cmd_list)
-    finally:
-        try:
-            proc.stdout.close()
-        except Exception:
-            pass
-
-def detect_executable(module_name, script_name=None):
-    exe = shutil.which(module_name)
-    if exe:
-        return [exe], "exe"
-    if script_name:
-        script_path = os.path.join(BASE_DIR, script_name)
-        if os.path.exists(script_path):
-            return [sys.executable, script_path], "script"
-    return [sys.executable, "-m", module_name], "module"
-
-def file_hashes(path):
-    sha256 = hashlib.sha256()
-    md5 = hashlib.md5()
-    size = 0
-    with open(path, "rb") as f:
-        while True:
-            chunk = f.read(8192)
-            if not chunk:
-                break
-            sha256.update(chunk)
-            md5.update(chunk)
-            size += len(chunk)
-    return {"size": size, "sha256": sha256.hexdigest(), "md5": md5.hexdigest()}
-
-# -------------------
-# Views / pages
-# -------------------
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return "painel_unificado rodando"
 
-@app.route("/sherlock")
-def sherlock_page():
-    return render_template("sherlock.html")
-
-@app.route("/metaweb")
-def metaweb_page():
-    return render_template("metaweb.html")
-
-@app.route("/vazamento")
-def vazamento_page():
-    return render_template("vazamento.html")
-
-@app.route("/sse/<tool>/<task_id>")
-def sse(tool, task_id):
-    headers = {
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",
-    }
-    return Response(stream_with_context(sse_stream(task_id)), mimetype="text/event-stream", headers=headers)
-
-# -------------------
-# Utilities to read params
-# -------------------
-def get_param_any(request_obj, name):
-    try:
-        data = request_obj.get_json(silent=True)
-    except Exception:
-        data = None
-    if data and name in data:
-        return data.get(name)
-    v = request_obj.form.get(name)
-    if v:
-        return v
-    v = request_obj.values.get(name)
-    return v
-
-# -------------------
-# Worker implementations
-# -------------------
-def _sherlock_worker(task_id, username):
-    try:
-        sse_put(task_id, "status", {"phase": "starting", "msg": "Iniciando Sherlock"})
-        sherlock_dir = os.path.join(BASE_DIR, "tools", "sherlock")
-        local_main = os.path.join(sherlock_dir, "sherlock_project", "__main__.py")
-        cwd = sherlock_dir
-
-        if os.path.exists(local_main):
-            exe_prefix = [sys.executable, "-m", "sherlock_project.__main__"]
-            how = "local-main"
-        else:
-            exe_prefix, how = detect_executable("sherlock", script_name=os.path.join("tools", "sherlock", "sherlock.py"))
-            cwd = None
-
-        cmd = exe_prefix + [username, "--print-found", "--timeout", "15"]
-        sse_put(task_id, "log", {"line": f"CMD: {' '.join(cmd)}"})
-
-        url_pattern = re.compile(r"(https?://\S+)")
-        try:
-            for line in run_command_stream(cmd, cwd=cwd):
-                line_with_links = url_pattern.sub(
-                    r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>',
-                    line,
-                )
-                sse_put(task_id, "log", {"line": line_with_links})
-        except FileNotFoundError:
-            sse_put(task_id, "error", {"msg": "sherlock não encontrado no ambiente."})
-            return
-        except subprocess.CalledProcessError as e:
-            sse_put(task_id, "error", {"msg": f"Sherlock retornou erro (exit {e.returncode})"})
-            return
-
-        sse_put(task_id, "done", {"ok": True})
-    except Exception:
-        app.logger.exception("Erro no _sherlock_worker")
-        sse_put(task_id, "error", {"msg": "Erro interno no worker sherlock"})
-    finally:
-        end_task(task_id)
-
-def _vazamento_worker(task_id, email=None, password=None):
-    try:
-        url_pattern = re.compile(r"(https?://\S+)")
-        if password:
-            sse_put(task_id, "status", {"phase": "starting", "msg": "Verificando senha (HIBP)"})
-            try:
-                import requests
-                sha1 = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()
-                prefix, suffix = sha1[:5], sha1[5:]
-                url = f"https://api.pwnedpasswords.com/range/{prefix}"
-                r = requests.get(url, timeout=10)
-                if r.status_code != 200:
-                    sse_put(task_id, "error", {"msg": f"HIBP retornou status {r.status_code}"})
-                    return
-                count = 0
-                for line in r.text.splitlines():
-                    if ":" not in line:
-                        continue
-                    h, c = line.split(":")
-                    if h == suffix:
-                        try:
-                            count = int(c.strip())
-                        except Exception:
-                            count = 1
-                        break
-                if count > 0:
-                    sse_put(task_id, "result", {"type": "password", "compromised": True, "count": count})
-                    sse_put(task_id, "log", {"line": f"[ALERTA] Senha encontrada {count} vezes em dumps públicos."})
-                else:
-                    sse_put(task_id, "result", {"type": "password", "compromised": False})
-                    sse_put(task_id, "log", {"line": "[OK] Senha não encontrada nos dumps conhecidos."})
-            except Exception as e:
-                sse_put(task_id, "error", {"msg": f"Erro HIBP: {e}"})
-        elif email:
-            sse_put(task_id, "status", {"phase": "starting", "msg": "Rodando checagem de vazamento (holehe)"})
-            exe_prefix, how = detect_executable("holehe", script_name=None)
-            cmd = exe_prefix + [email]
-            sse_put(task_id, "log", {"line": f"CMD: {' '.join(cmd)}"})
-            try:
-                for line in run_command_stream(cmd):
-                    # ignora linhas que são apenas porcentagem de progresso
-                    if re.fullmatch(r"\d{1,3}%", line.strip()):
-                        continue
-                    # transforma URLs em links clicáveis
-                    line_with_links = url_pattern.sub(
-                        r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>',
-                        line,
-                    )
-                    sse_put(task_id, "log", {"line": line_with_links})
-                    stripped = line.strip()
-                    if stripped.startswith("{") and stripped.endswith("}"):
-                        try:
-                            obj = json.loads(stripped)
-                            sse_put(task_id, "result", {"type": "holehe", "data": obj})
-                        except Exception:
-                            pass
-            except FileNotFoundError:
-                sse_put(task_id, "error", {"msg": "holehe não encontrado no ambiente."})
-                return
-            except subprocess.CalledProcessError as e:
-                sse_put(task_id, "error", {"msg": f"Holehe retornou erro (exit {e.returncode})"})
-                return
-        else:
-            sse_put(task_id, "error", {"msg": "Nenhum email ou senha fornecido."})
-            return
-
-        sse_put(task_id, "done", {"ok": True})
-    except Exception:
-        app.logger.exception("Erro no _vazamento_worker")
-        sse_put(task_id, "error", {"msg": "Erro interno no worker vazamento"})
-    finally:
-        end_task(task_id)
-
-# ... (_metaweb_worker e endpoints permanecem iguais) ...
-def _metaweb_worker(task_id, file_path=None, target=None):
-    try:
-        sse_put(task_id, "status", {"phase": "starting", "msg": "Coletando MetaWeb"})
-        if file_path:
-            sse_put(task_id, "log", {"line": f"Analisando arquivo: {file_path}"})
-            try:
-                info = file_hashes(file_path)
-                info["filename"] = os.path.basename(file_path)
-                with open(file_path, "rb") as f:
-                    preview = f.read(1024)
-                info["preview_hex"] = preview[:256].hex()
-                sse_put(task_id, "result", {"type": "file", "data": info})
-            except Exception as e:
-                sse_put(task_id, "log", {"line": f"Erro ao calcular hashes: {e}"})
-
-            # --- exiftool ---
-            try:
-                for line in run_command_stream(["exiftool", file_path]):
-                    sse_put(task_id, "log", {"line": line})
-            except FileNotFoundError:
-                sse_put(task_id, "log", {"line": "exiftool indisponível."})
-            except Exception:
-                sse_put(task_id, "log", {"line": "exiftool erro."})
-
-            # --- mediainfo ---
-            try:
-                for line in run_command_stream(["mediainfo", file_path]):
-                    sse_put(task_id, "log", {"line": line})
-            except FileNotFoundError:
-                sse_put(task_id, "log", {"line": "mediainfo indisponível."})
-            except Exception:
-                sse_put(task_id, "log", {"line": "mediainfo erro."})
-
-            # --- file ---
-            try:
-                for line in run_command_stream(["file", "-b", file_path]):
-                    sse_put(task_id, "log", {"line": line})
-            except FileNotFoundError:
-                sse_put(task_id, "log", {"line": "utilitário 'file' indisponível."})
-            except Exception:
-                sse_put(task_id, "log", {"line": "utilitário 'file' erro."})
-
-            # --- pdfinfo ---
-            try:
-                for line in run_command_stream(["pdfinfo", file_path]):
-                    sse_put(task_id, "log", {"line": "[PDF] " + line})
-            except FileNotFoundError:
-                sse_put(task_id, "log", {"line": "pdfinfo indisponível."})
-            except Exception:
-                sse_put(task_id, "log", {"line": "pdfinfo erro ou não é PDF."})
-
-            # --- pdfminer.six (extração de texto) ---
-            try:
-                from pdfminer.high_level import extract_text
-                text = extract_text(file_path)
-                snippet = text[:500].replace("\n", " ")
-                sse_put(task_id, "log", {"line": f"[PDFMINER] Conteúdo extraído (primeiros 500 chars): {snippet}"})
-            except Exception:
-                sse_put(task_id, "log", {"line": "pdfminer.six indisponível ou não é PDF."})
-
-            # --- oletools ---
-            try:
-                from oletools.olevba3 import VBA_Parser
-                parser = VBA_Parser(file_path)
-                if parser.detect_vba_macros():
-                    sse_put(task_id, "log", {"line": "[OLE] Macros detectadas"})
-                    for (subfilename, stream_path, vba_filename, vba_code) in parser.extract_macros():
-                        sse_put(task_id, "log", {"line": f"[OLE] {vba_filename} snippet: {vba_code[:100].strip()}"})
-                parser.close()
-            except Exception:
-                sse_put(task_id, "log", {"line": "oletools indisponível ou não é OLE."})
-
-            # --- hachoir-metadata ---
-            try:
-                for line in run_command_stream(["hachoir-metadata", file_path]):
-                    sse_put(task_id, "log", {"line": "[Hachoir] " + line})
-            except FileNotFoundError:
-                sse_put(task_id, "log", {"line": "hachoir-metadata indisponível."})
-            except Exception:
-                sse_put(task_id, "log", {"line": "hachoir-metadata erro."})
-
-            # --- ffprobe ---
-            try:
-                for line in run_command_stream(["ffprobe", "-i", file_path, "-hide_banner"]):
-                    sse_put(task_id, "log", {"line": "[FFPROBE] " + line})
-            except FileNotFoundError:
-                sse_put(task_id, "log", {"line": "ffprobe indisponível."})
-            except Exception:
-                sse_put(task_id, "log", {"line": "ffprobe erro ou não é mídia."})
-
-            # --- strings (limitado) ---
-            try:
-                # executa via bash -c para pipes
-                for line in run_command_stream(["bash", "-c", f"strings -n 6 -a {file_path} | head -n 200"]):
-                    sse_put(task_id, "log", {"line": "[STRINGS] " + line})
-            except FileNotFoundError:
-                sse_put(task_id, "log", {"line": "utilitário 'strings' indisponível."})
-            except Exception:
-                sse_put(task_id, "log", {"line": "strings erro."})
-
-        elif target:
-            host = safe_domain(target)
-            sse_put(task_id, "log", {"line": f"Consulta de alvo: {host}"})
-            # aqui você pode adicionar checks adicionais (whois, http, etc.)
-        else:
-            sse_put(task_id, "log", {"line": "Nenhum arquivo nem target fornecido."})
-
-        sse_put(task_id, "done", {"ok": True})
-    except Exception:
-        app.logger.exception("Erro no _metaweb_worker")
-        sse_put(task_id, "error", {"msg": "Erro interno no worker metaweb"})
-    finally:
-        end_task(task_id)
-
-# -------------------
-# HTTP endpoints to start tools
-# -------------------
+# sherlock
 @app.route("/sherlock/start", methods=["POST"])
 def sherlock_start():
     username = get_param_any(request, "username") or ""
     username = username.strip()
     if not username:
         return jsonify({"error": "username_required"}), 400
+
     task_id = start_task()
+    save_history(
+        tool="sherlock",
+        params={"username": username},
+        result={"note": "start"},
+        status="started",
+        task_id=task_id,
+    )
     th = threading.Thread(target=_sherlock_worker, args=(task_id, username), daemon=True)
     th.start()
     return jsonify({"task_id": task_id})
 
+def _sherlock_worker(task_id, username):
+    outdir = os.path.join("sherlock_results", task_id)
+    os.makedirs(outdir, exist_ok=True)
+    cmd = ["python3", "sherlock/sherlock", username, "--output", os.path.join(outdir, "result.json")]
+    output, rc = run_subprocess_with_sse(task_id, cmd)
+    result = {}
+    if rc == 0:
+        try:
+            with open(os.path.join(outdir, "result.json"), "r", encoding="utf-8") as f:
+                result = json.load(f)
+        except Exception as e:
+            result = {"error": str(e)}
+    else:
+        result = {"error": f"return_code={rc}"}
+    record_history(task_id, "sherlock", {"username": username}, result, output[:10000], "done")
+    finish_task(task_id, result)
+
+# vazamento
 @app.route("/vazamento/start", methods=["POST"])
 def vazamento_start():
     email = get_param_any(request, "email")
     password = get_param_any(request, "password")
     if not email and not password:
         return jsonify({"error": "email_or_password_required"}), 400
+
     task_id = start_task()
+    tool_name = "vazamento_password" if password and not email else (
+        "vazamento_holehe" if email and not password else "vazamento"
+    )
+    snapshot_params = {}
+    if email:
+        snapshot_params["email"] = email
+    if password:
+        sha1 = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()
+        snapshot_params["password_prefix"] = sha1[:5]
+
+    save_history(
+        tool=tool_name,
+        params=snapshot_params,
+        result={"note": "start"},
+        status="started",
+        task_id=task_id,
+    )
     th = threading.Thread(target=_vazamento_worker, args=(task_id, email, password), daemon=True)
     th.start()
     return jsonify({"task_id": task_id})
 
+def _vazamento_worker(task_id, email, password):
+    script = os.path.join(os.getcwd(), "email_leak_checker_full.sh")
+    args = ["bash", script]
+    if email:
+        args.extend(["--email", email])
+    if password:
+        args.extend(["--password", password])
+    output, rc = run_subprocess_with_sse(task_id, args)
+    result = {"return_code": rc}
+    try:
+        start = output.find("{")
+        end = output.rfind("}")
+        if start >= 0 and end > start:
+            result.update(json.loads(output[start:end+1]))
+    except Exception as e:
+        result["json_error"] = str(e)
+    record_history(task_id, "vazamento", {"email": email, "password": "***" if password else None}, result, output[:10000], "done")
+    finish_task(task_id, result)
+
+# metaweb
 @app.route("/metaweb/start", methods=["POST"])
 def metaweb_start():
     file = request.files.get("file")
     target = get_param_any(request, "target")
     if not file and not target:
         return jsonify({"error": "file_or_target_required"}), 400
+
     file_path = None
     if file:
         filename = secure_filename(file.filename)
@@ -469,26 +259,101 @@ def metaweb_start():
         file_path = os.path.join(UPLOAD_DIR, unique)
         file.save(file_path)
         app.logger.info("metaweb saved upload %s", file_path)
+
     task_id = start_task()
-    th = threading.Thread(target=_metaweb_worker, kwargs={"task_id": task_id, "file_path": file_path, "target": (target or None)}, daemon=True)
+    if file_path:
+        save_history(
+            tool="metaweb_file",
+            params={"file": os.path.basename(file_path)},
+            result={"note": "start"},
+            status="started",
+            task_id=task_id,
+        )
+    else:
+        save_history(
+            tool="metaweb_target",
+            params={"target": target},
+            result={"note": "start"},
+            status="started",
+            task_id=task_id,
+        )
+
+    th = threading.Thread(
+        target=_metaweb_worker,
+        kwargs={"task_id": task_id, "file_path": file_path, "target": (target or None)},
+        daemon=True,
+    )
     th.start()
     return jsonify({"task_id": task_id})
 
-# favicon & health
-@app.route("/favicon.ico")
-def favicon():
-    return ("", 204)
+def _metaweb_worker(task_id, file_path=None, target=None):
+    output_dir = os.path.join("metaweb_results", task_id)
+    os.makedirs(output_dir, exist_ok=True)
+    args = ["python3", "metaweb.py"]
+    if file_path:
+        args.extend(["--file", file_path])
+    if target:
+        args.extend(["--target", target])
+    args.extend(["--out", output_dir])
+    output, rc = run_subprocess_with_sse(task_id, args)
+    result = {"return_code": rc}
+    outjson = os.path.join(output_dir, "result.json")
+    if os.path.exists(outjson):
+        try:
+            with open(outjson, "r", encoding="utf-8") as f:
+                result.update(json.load(f))
+        except Exception as e:
+            result["json_error"] = str(e)
+    record_history(task_id, "metaweb", {"file": file_path, "target": target}, result, output[:10000], "done")
+    finish_task(task_id, result)
 
-@app.route("/healthz")
-def healthz():
-    return jsonify({"ok": True})
+# SSE
+@app.route("/events/<task_id>")
+def sse_events(task_id):
+    def gen():
+        pos = 0
+        while True:
+            st = task_status(task_id)
+            if st is None:
+                yield f"data: {json.dumps({'error':'task_not_found'})}\n\n"
+                break
+            msgs = st["messages"]
+            if pos < len(msgs):
+                for m in msgs[pos:]:
+                    yield f"data: {json.dumps({'message':m})}\n\n"
+                pos = len(msgs)
+            if st["status"] == "done":
+                yield f"data: {json.dumps({'done':True,'result':st['result']})}\n\n"
+                break
+            time.sleep(1)
+    return Response(gen(), mimetype="text/event-stream")
 
-# factory (useful for gunicorn)
-def create_app():
-    return app
+# admin
+@app.route("/admin/history")
+def admin_history():
+    if not check_admin_token():
+        return abort(401)
+    data = fetch_history(limit=200)
+    html = "<h1>History</h1><table border=1><tr><th>id</th><th>timestamp</th><th>task_id</th><th>tool</th><th>params</th><th>result</th><th>status</th><th>raw</th></tr>"
+    for d in data:
+        html += f"<tr><td>{d['id']}</td><td>{d['timestamp']}</td><td>{d['task_id']}</td><td>{d['tool']}</td><td>{d['params']}</td><td>{d['result']}</td><td>{d['status']}</td><td><a href='/admin/history/{d['id']}/download?token={ADMIN_TOKEN}'>download</a></td></tr>"
+    html += "</table>"
+    return html
+
+@app.route("/admin/history/<int:hid>/download")
+def admin_history_download(hid):
+    if not check_admin_token():
+        return abort(401)
+    raw = fetch_history_raw(hid)
+    if raw is None:
+        return abort(404)
+    resp = make_response(raw)
+    resp.headers.set("Content-Type", "text/plain; charset=utf-8")
+    resp.headers.set("Content-Disposition", f"attachment; filename=history_{hid}.txt")
+    return resp
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.logger.info("Starting app on port %s", port)
-    # debug False para produção; se precisar de reload, altere localmente
-    app.run(host="0.0.0.0", port=port, debug=False)
+    print(f"[INFO] {datetime.utcnow().isoformat()} Starting app on port {port}")
+    app.run(host="0.0.0.0", port=port)
