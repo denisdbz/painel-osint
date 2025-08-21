@@ -24,6 +24,7 @@ from flask import (
 )
 from flask_cors import CORS
 
+
 # ----------------------
 # Config / paths
 # ----------------------
@@ -38,6 +39,7 @@ os.makedirs(RUNS_DIR, exist_ok=True)
 
 # max chars of raw output to keep in DB (prevents DB blowup)
 MAX_OUTPUT_CHARS = 16000
+
 
 # ----------------------
 # Flask app
@@ -71,6 +73,7 @@ def detect_phoneinfoga():
     # se não achar em lugar nenhum
     return None, "not_found"
 
+
 @app.route("/phoneinfoga", methods=["GET", "POST"])
 def phoneinfoga():
     if request.method == "POST":
@@ -84,7 +87,10 @@ def phoneinfoga():
 
         try:
             cmd_prefix, _how = detect_phoneinfoga()
-            # ✅ v2 não suporta -o/-f, apenas scan -n
+            if not cmd_prefix:
+                return render_template("phoneinfoga.html", erro="PhoneInfoga não encontrado.")
+
+            # v2 não suporta -o/-f, apenas scan -n
             cmd = cmd_prefix + ["scan", "-n", numero]
 
             result = subprocess.run(
@@ -96,38 +102,37 @@ def phoneinfoga():
 
             if result.returncode != 0:
                 return render_template(
-                    "phoneinfoga.html", 
+                    "phoneinfoga.html",
                     erro=f"Erro ao executar PhoneInfoga: {result.stderr}"
                 )
 
             output = result.stdout.strip()
 
-try:
-    dados = json.loads(output)
-except json.JSONDecodeError:
-    dados = {"raw_output": output}
+            try:
+                dados = json.loads(output)
+            except json.JSONDecodeError:
+                dados = {"raw_output": output}
 
-# salvar relatório
-with open(json_path, "w", encoding="utf-8") as f:
-    json.dump(dados, f, indent=2, ensure_ascii=False)
+            # salvar relatório
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(dados, f, indent=2, ensure_ascii=False)
+
             # 🔎 extrair links com regex
             raw_text = json.dumps(dados, ensure_ascii=False)
             links = re.findall(r'https?://[^\s"\'<>]+', raw_text)
 
-return render_template(
-    "relatorio_phoneinfoga.html",
-    numero=numero,
-    dados=dados,
-    dados_json=json.dumps(dados, ensure_ascii=False),
-    links=links
-)
+            return render_template(
+                "relatorio_phoneinfoga.html",
+                numero=numero,
+                dados=dados,
+                dados_json=json.dumps(dados, ensure_ascii=False),
+                links=links
+            )
         except Exception as e:
             return render_template("phoneinfoga.html", erro=str(e))
 
     # GET
     return render_template("phoneinfoga.html")
-
-
 # -------------------
 # SQLite (history)
 # -------------------
@@ -151,6 +156,7 @@ def init_db():
     )
     conn.commit()
     conn.close()
+
 
 def record_history(task_id, tool, params_dict, result_dict, raw_output, status="ok"):
     try:
@@ -179,6 +185,7 @@ def record_history(task_id, tool, params_dict, result_dict, raw_output, status="
     except Exception:
         app.logger.exception("failed to record history")
 
+
 def save_history(tool, params=None, result=None, raw_output=None, status="started", task_id=None):
     if task_id is None:
         task_id = str(uuid.uuid4())
@@ -191,6 +198,7 @@ def save_history(tool, params=None, result=None, raw_output=None, status="starte
         status=status,
     )
     return task_id
+
 
 def fetch_history(limit=200):
     init_db()
@@ -218,6 +226,7 @@ def fetch_history(limit=200):
         )
     return out
 
+
 def fetch_history_raw(hid):
     init_db()
     conn = sqlite3.connect(DB_PATH)
@@ -229,11 +238,13 @@ def fetch_history_raw(hid):
         return None
     return r[0]
 
+
 # -------------------
 # SSE infra
 # -------------------
 
 streams = {}  # task_id -> queue.Queue()
+
 
 def start_task():
     task_id = str(uuid.uuid4())
@@ -241,9 +252,11 @@ def start_task():
     app.logger.info("start_task %s", task_id)
     return task_id
 
+
 def end_task(task_id):
     time.sleep(0.2)
     app.logger.info("end_task %s", task_id)
+
 
 def sse_put(task_id, event, data):
     q = streams.get(task_id)
@@ -252,6 +265,7 @@ def sse_put(task_id, event, data):
         return
     payload = f"event: {event}\n" + "data: " + json.dumps(data, ensure_ascii=False) + "\n\n"
     q.put(payload)
+
 
 def sse_stream(task_id):
     q = streams.get(task_id)
@@ -278,7 +292,6 @@ def sse_stream(task_id):
     finally:
         streams.pop(task_id, None)
         app.logger.debug("sse_stream finished for %s", task_id)
-
 # -------------------
 # Helpers
 # -------------------
@@ -287,6 +300,7 @@ def safe_domain(input_str):
     parsed = urlparse(input_str if re.match(r"^https?://", input_str) else f"http://{input_str}")
     host = parsed.hostname or input_str
     return host
+
 
 def run_command_stream(cmd_list, cwd=None, env=None):
     try:
@@ -330,6 +344,7 @@ def run_command_stream(cmd_list, cwd=None, env=None):
         except Exception:
             pass
 
+
 def detect_executable(module_name, script_name=None):
     exe = shutil.which(module_name)
     if exe:
@@ -339,6 +354,7 @@ def detect_executable(module_name, script_name=None):
         if os.path.exists(script_path):
             return [sys.executable, script_path], "script"
     return [sys.executable, "-m", module_name], "module"
+
 
 def file_hashes(path):
     sha256 = hashlib.sha256()
@@ -353,6 +369,7 @@ def file_hashes(path):
             md5.update(chunk)
             size += len(chunk)
     return {"size": size, "sha256": sha256.hexdigest(), "md5": md5.hexdigest()}
+
 
 # -------------------
 # Workers (cada worker acumula saída e grava histórico)
@@ -373,295 +390,7 @@ def _sherlock_worker(task_id, username):
         else:
             exe_prefix, how = detect_executable(
                 "sherlock",
-                script_name=os.path.join("tools", "sherlock", "sherlock.py"),
-            )
-            cwd = None
-
-        cmd = exe_prefix + [username, "--print-found", "--timeout", "15"]
-        sse_put(task_id, "log", {"line": f"CMD: {' '.join(cmd)}"})
-        url_pattern = re.compile(r"(https?://\S+)")
-        try:
-            for line in run_command_stream(cmd, cwd=cwd):
-                line_with_links = url_pattern.sub(
-                    r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>',
-                    line,
-                )
-                lines.append(line_with_links)
-                if "http" in line.lower():
-                    found_count += 1
-                sse_put(task_id, "log", {"line": line_with_links})
-        except FileNotFoundError:
-            sse_put(task_id, "error", {"msg": "sherlock não encontrado no ambiente."})
-            record_history(
-                task_id,
-                "sherlock",
-                {"username": username},
-                {"found": 0, "note": "not found"},
-                "\n".join(lines),
-                status="error",
-            )
-            return
-        except subprocess.CalledProcessError as e:
-            sse_put(task_id, "error", {"msg": f"Sherlock retornou erro (exit {e.returncode})"})
-            record_history(
-                task_id,
-                "sherlock",
-                {"username": username},
-                {"found": found_count, "error": f"exit {e.returncode}"},
-                "\n".join(lines),
-                status="error",
-            )
-            return
-
-        sse_put(task_id, "result", {"type": "sherlock_summary", "found": found_count})
-        sse_put(task_id, "done", {"ok": True})
-        record_history(
-            task_id,
-            "sherlock",
-            {"username": username},
-            {"found": found_count},
-            "\n".join(lines),
-            status="ok",
-        )
-    except Exception:
-        app.logger.exception("Erro no _sherlock_worker")
-        sse_put(task_id, "error", {"msg": "Erro interno no worker sherlock"})
-        record_history(
-            task_id,
-            "sherlock",
-            {"username": username},
-            {"error": "internal"},
-            "\n".join(lines),
-            status="error",
-        )
-    finally:
-        end_task(task_id)
-
-def _vazamento_worker(task_id, email=None, password=None):
-    lines = []
-    try:
-        url_pattern = re.compile(r"(https?://\S+)")
-        if password:
-            sse_put(task_id, "status", {"phase": "starting", "msg": "Verificando senha (HIBP)"})
-            try:
-                import requests
-                sha1 = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()
-                prefix, suffix = sha1[:5], sha1[5:]
-                url = f"https://api.pwnedpasswords.com/range/{prefix}"
-                r = requests.get(url, timeout=10)
-                if r.status_code != 200:
-                    sse_put(task_id, "error", {"msg": f"HIBP retornou status {r.status_code}"})
-                    record_history(
-                        task_id,
-                        "vazamento_password",
-                        {"password_hash_prefix": prefix},
-                        {"error": f"status {r.status_code}"},
-                        "\n".join(lines),
-                        status="error",
-                    )
-                    return
-                count = 0
-                for line in r.text.splitlines():
-                    if ":" not in line:
-                        continue
-                    h, c = line.split(":")
-                    if h == suffix:
-                        try:
-                            count = int(c.strip())
-                        except Exception:
-                            count = 1
-                        break
-                if count > 0:
-                    sse_put(task_id, "result", {"type": "password", "compromised": True, "count": count})
-                    sse_put(task_id, "log", {"line": f"[ALERTA] Senha encontrada {count} vezes em dumps públicos."})
-                else:
-                    sse_put(task_id, "result", {"type": "password", "compromised": False})
-                    sse_put(task_id, "log", {"line": "[OK] Senha não encontrada nos dumps conhecidos."})
-                lines.append(f"HIBP count: {count}")
-                record_history(
-                    task_id,
-                    "vazamento_password",
-                    {"password_prefix": prefix},
-                    {"compromised": count > 0, "count": count},
-                    "\n".join(lines),
-                    status="ok",
-                )
-            except Exception as e:
-                app.logger.exception("Erro HIBP")
-                sse_put(task_id, "error", {"msg": f"Erro HIBP: {e}"})
-                record_history(
-                    task_id,
-                    "vazamento_password",
-                    {"error": str(e)},
-                    {},
-                    "\n".join(lines),
-                    status="error",
-                )
-        elif email:
-            sse_put(task_id, "status", {"phase": "starting", "msg": "Rodando checagem de vazamento (holehe)"})
-            exe_prefix, _how = detect_executable("holehe", script_name=None)
-            cmd = exe_prefix + [email]
-            sse_put(task_id, "log", {"line": f"CMD: {' '.join(cmd)}"})
-            try:
-                for line in run_command_stream(cmd):
-                    if re.fullmatch(r"\d{1,3}%", line.strip()):
-                        continue
-                    line_with_links = url_pattern.sub(
-                        r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>',
-                        line,
-                    )
-                    lines.append(line_with_links)
-                    sse_put(task_id, "log", {"line": line_with_links})
-                    stripped = line.strip()
-                    if stripped.startswith("{") and stripped.endswith("}"):
-                        try:
-                            obj = json.loads(stripped)
-                            sse_put(task_id, "result", {"type": "holehe", "data": obj})
-                        except Exception:
-                            pass
-            except FileNotFoundError:
-                sse_put(task_id, "error", {"msg": "holehe não encontrado no ambiente."})
-                record_history(
-                    task_id,
-                    "vazamento_holehe",
-                    {"email": email},
-                    {"error": "holehe_not_found"},
-                    "\n".join(lines),
-                    status="error",
-                )
-                return
-            except subprocess.CalledProcessError as e:
-                sse_put(task_id, "error", {"msg": f"Holehe retornou erro (exit {e.returncode})"})
-                record_history(
-                    task_id,
-                    "vazamento_holehe",
-                    {"email": email},
-                    {"error": f"exit {e.returncode}"},
-                    "\n".join(lines),
-                    status="error",
-                )
-                return
-
-            sse_put(task_id, "done", {"ok": True})
-            record_history(
-                task_id,
-                "vazamento_holehe",
-                {"email": email},
-                {"note": "holehe_done"},
-                "\n".join(lines),
-                status="ok",
-            )
-        else:
-            sse_put(task_id, "error", {"msg": "Nenhum email ou senha fornecido."})
-            record_history(
-                task_id,
-                "vazamento",
-                {"error": "no_param"},
-                {},
-                "\n".join(lines),
-                status="error",
-            )
-            return
-    except Exception:
-        app.logger.exception("Erro no _vazamento_worker")
-        sse_put(task_id, "error", {"msg": "Erro interno no worker vazamento"})
-        record_history(
-            task_id,
-            "vazamento",
-            {"error": "internal"},
-            {},
-            "\n".join(lines),
-            status="error",
-        )
-    finally:
-        end_task(task_id)
-
-def _metaweb_worker(task_id, file_path=None, target=None):
-    lines = []
-    try:
-        sse_put(task_id, "status", {"phase": "starting", "msg": "Coletando MetaWeb"})
-        if file_path:
-            sse_put(task_id, "log", {"line": f"Analisando arquivo: {file_path}"})
-            try:
-                info = file_hashes(file_path)
-                info["filename"] = os.path.basename(file_path)
-                with open(file_path, "rb") as f:
-                    preview = f.read(1024)
-                info["preview_hex"] = preview[:256].hex()
-                sse_put(task_id, "result", {"type": "file", "data": info})
-                lines.append(f"FILE: {info.get('filename')} size={info.get('size')}")
-            except Exception as e:
-                sse_put(task_id, "log", {"line": f"Erro ao calcular hashes: {e}"})
-                lines.append(f"hash_error: {e}")
-
-            # --- exiftool ---
-            try:
-                for line in run_command_stream(["exiftool", file_path]):
-                    lines.append("[EXIF] " + line)
-                    sse_put(task_id, "log", {"line": line})
-            except FileNotFoundError:
-                sse_put(task_id, "log", {"line": "exiftool indisponível."})
-            except Exception:
-                sse_put(task_id, "log", {"line": "exiftool erro."})
-
-            # --- mediainfo ---
-            try:
-                for line in run_command_stream(["mediainfo", file_path]):
-                    lines.append("[MEDIA] " + line)
-                    sse_put(task_id, "log", {"line": line})
-            except FileNotFoundError:
-                sse_put(task_id, "log", {"line": "mediainfo indisponível."})
-            except Exception:
-                sse_put(task_id, "log", {"line": "mediainfo erro."})
-
-            # ... outros checks similares (file, pdfinfo, oletools, hachoir, ffprobe, strings) ...
-            sse_put(task_id, "done", {"ok": True})
-            record_history(
-                task_id,
-                "metaweb_file",
-                {"file": os.path.basename(file_path)},
-                {"note": "metaweb done"},
-                "\n".join(lines),
-                status="ok",
-            )
-        elif target:
-            host = safe_domain(target)
-            sse_put(task_id, "log", {"line": f"Consulta de alvo: {host}"})
-            lines.append(f"target: {host}")
-            sse_put(task_id, "done", {"ok": True})
-            record_history(
-                task_id,
-                "metaweb_target",
-                {"target": target},
-                {"note": "metaweb target done"},
-                "\n".join(lines),
-                status="ok",
-            )
-        else:
-            sse_put(task_id, "error", {"msg": "Nenhum arquivo nem target fornecido."})
-            record_history(
-                task_id,
-                "metaweb",
-                {"error": "no_param"},
-                {},
-                "\n".join(lines),
-                status="error",
-            )
-
-    except Exception:
-        app.logger.exception("Erro no _metaweb_worker")
-        sse_put(task_id, "error", {"msg": "Erro interno no worker metaweb"})
-        record_history(
-            task_id,
-            "metaweb",
-            {"error": "internal"},
-            {},
-            "\n".join(lines),
-            status="error",
-        )
-    finally:
-        end_task(task_id)
-
+                script_name=os.path.join("tools", "sher
 # -------------------
 # Views / pages & SSE endpoint
 # -------------------
@@ -670,17 +399,21 @@ def _metaweb_worker(task_id, file_path=None, target=None):
 def index():
     return render_template("index.html")
 
+
 @app.route("/sherlock")
 def sherlock_page():
     return render_template("sherlock.html")
+
 
 @app.route("/metaweb")
 def metaweb_page():
     return render_template("metaweb.html")
 
+
 @app.route("/vazamento")
 def vazamento_page():
     return render_template("vazamento.html")
+
 
 @app.route("/sse/<tool>/<task_id>")
 def sse(tool, task_id):
@@ -693,6 +426,7 @@ def sse(tool, task_id):
         mimetype="text/event-stream",
         headers=headers,
     )
+
 
 # -------------------
 # Utilities to read params
@@ -710,6 +444,7 @@ def get_param_any(request_obj, name):
         return v
     v = request_obj.values.get(name)
     return v
+
 
 # -------------------
 # HTTP endpoints to start tools
@@ -735,6 +470,7 @@ def sherlock_start():
     th = threading.Thread(target=_sherlock_worker, args=(task_id, username), daemon=True)
     th.start()
     return jsonify({"task_id": task_id})
+
 
 @app.route("/vazamento/start", methods=["POST"])
 def vazamento_start():
@@ -771,6 +507,7 @@ def vazamento_start():
     )
     th.start()
     return jsonify({"task_id": task_id})
+
 
 @app.route("/metaweb/start", methods=["POST"])
 def metaweb_start():
@@ -814,6 +551,7 @@ def metaweb_start():
     th.start()
     return jsonify({"task_id": task_id})
 
+
 # -------------------
 # favicon & health
 # -------------------
@@ -822,9 +560,11 @@ def metaweb_start():
 def favicon():
     return ("", 204)
 
+
 @app.route("/healthz")
 def healthz():
     return jsonify({"ok": True})
+
 
 # -------------------
 # Admin: histórico (protegido por token)
@@ -836,6 +576,7 @@ def check_admin_token():
     if not token_req or token_req != token_env:
         return False
     return True
+
 
 @app.route("/admin/history")
 def admin_history_page():
@@ -870,6 +611,7 @@ def admin_history_page():
     html.append("</table></body></html>")
     return Response("\n".join(html), mimetype="text/html")
 
+
 @app.route("/admin/history.json")
 def admin_history_json():
     if not check_admin_token():
@@ -881,6 +623,7 @@ def admin_history_json():
         limit = 200
     rows = fetch_history(limit=limit)
     return jsonify(rows)
+
 
 @app.route("/admin/history/<int:hid>/download")
 def admin_history_download(hid):
@@ -894,6 +637,7 @@ def admin_history_download(hid):
     resp.headers.set("Content-Disposition", f"attachment; filename=history_{hid}.txt")
     return resp
 
+
 # -------------------
 # factory (useful for gunicorn)
 # -------------------
@@ -901,6 +645,7 @@ def admin_history_download(hid):
 def create_app():
     init_db()
     return app
+
 
 # -------------------
 # Main
