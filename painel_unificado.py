@@ -373,20 +373,15 @@ def file_hashes(path):
             size += len(chunk)
     return {"size": size, "sha256": sha256.hexdigest(), "md5": md5.hexdigest()}
 
-
 # -------------------
 # Workers (cada worker acumula saída e grava histórico)
 # -------------------
 
 def _sherlock_worker(task_id, username):
-
     lines = []
     found_count = 0
     try:
-        sse_put(task_id, "status", {
-            "phase": "starting",
-            "msg": f"Iniciando análise com Sherlock para {username}"
-        })
+        sse_put(task_id, "status", {"phase": "starting", "msg": f"Iniciando análise com Sherlock para {username}"})
 
         sherlock_dir = os.path.join(BASE_DIR, "tools", "sherlock")
         local_main = os.path.join(sherlock_dir, "sherlock_project", "__main__.py")
@@ -399,44 +394,64 @@ def _sherlock_worker(task_id, username):
             exe_prefix, how = detect_executable("sherlock")
             script_name = os.path.join("tools", "sherlock")
 
-        # Monta o comando do Sherlock
         cmd = exe_prefix + [username, "--print-found", "--timeout", "15"]
-
         sse_put(task_id, "status", {"phase": "running", "msg": f"Executando Sherlock via {how}"})
 
-        process = subprocess.Popen(
-            cmd,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines=True
-        )
+        process = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
-        # Captura saída linha a linha
         for line in process.stdout:
             line = line.strip()
             if not line:
                 continue
             lines.append(line)
             sse_put(task_id, "output", {"line": line})
-
-            # Contador simples de sites encontrados
             if "http" in line or "found" in line.lower():
                 found_count += 1
 
         process.wait()
 
-        # Finalização
         if process.returncode == 0:
-            sse_put(task_id, "status", {
-                "phase": "finished",
-                "msg": f"Análise concluída. {found_count} resultados encontrados."
-            })
+            sse_put(task_id, "status", {"phase": "finished", "msg": f"Análise concluída. {found_count} resultados encontrados."})
         else:
-            sse_put(task_id, "status", {
-                "phase": "error",
-                "msg": f"Sherlock terminou com código {process.returncode}"
-            })
+            sse_put(task_id, "status", {"phase": "error", "msg": f"Sherlock terminou com código {process.returncode}"})
+
+    except Exception as e:
+        sse_put(task_id, "status", {"phase": "error", "msg": str(e)})
+
+
+def _vazamento_worker(task_id, email=None, password=None):
+    try:
+        sse_put(task_id, "status", {"phase": "starting", "msg": "Iniciando análise de vazamento"})
+
+        cmd = ["python3", "tools/holehe/holehe.py"]
+        if email:
+            cmd += ["--email", email]
+        if password:
+            cmd += ["--password", password]
+
+        for line in run_command_stream(cmd):
+            sse_put(task_id, "output", {"line": line})
+
+        sse_put(task_id, "status", {"phase": "finished", "msg": "Análise de vazamento finalizada"})
+
+    except Exception as e:
+        sse_put(task_id, "status", {"phase": "error", "msg": str(e)})
+
+
+def _metaweb_worker(task_id, file_path=None, target=None):
+    try:
+        sse_put(task_id, "status", {"phase": "starting", "msg": "Iniciando análise com MetaWeb"})
+
+        cmd = ["python3", "tools/metaweb/metaweb.py"]
+        if file_path:
+            cmd += ["--file", file_path]
+        if target:
+            cmd += ["--target", target]
+
+        for line in run_command_stream(cmd):
+            sse_put(task_id, "output", {"line": line})
+
+        sse_put(task_id, "status", {"phase": "finished", "msg": "MetaWeb finalizado"})
 
     except Exception as e:
         sse_put(task_id, "status", {"phase": "error", "msg": str(e)})
