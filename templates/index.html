@@ -1,15 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="card">
+  <h2 class="text-xl font-bold mb-2">Painel OSINT Unificado</h2>
+  <p>Escolha uma das ferramentas abaixo para começar:</p>
 
-<h2 class="text-xl font-bold mb-2">Painel OSINT Unificado</h2>
-<p>Escolha uma das ferramentas acima para começar:</p>
-<ul class="list-disc ml-6 mt-2">
-  <li><b>Sherlock</b>: busca perfis por nome de usuário</li>
-  <li><b>MetaWeb</b>: análise de metadados ocultos</li>
-  <li><b>Vazamento</b>: verificação de e-mails/senhas</li>
-</ul>
+  <div class="grid gap-4 mt-4 md:grid-cols-2 lg:grid-cols-3">
+    <a href="{{ url_for('sherlock_page') }}" class="card p-4 text-center hover:bg-gray-800 rounded">
+      🕵 Sherlock<br>
+      <small>Busca perfis por nome de usuário</small>
+    </a>
 
+    <a href="{{ url_for('metaweb_page') }}" class="card p-4 text-center hover:bg-gray-800 rounded">
+      🌐 MetaWeb<br>
+      <small>Análise de metadados ocultos</small>
+    </a>
+
+    <a href="{{ url_for('vazamento_page') }}" class="card p-4 text-center hover:bg-gray-800 rounded">
+      💧 Vazamento<br>
+      <small>Verificação de e-mails/senhas</small>
+    </a>
+
+    <a href="{{ url_for('phoneinfoga') }}" class="card p-4 text-center hover:bg-gray-800 rounded">
+      📱 PhoneInfoga<br>
+      <small>Análise de números de telefone</small>
+    </a>
+  </div>
 </section>
 {% endblock %}
-
