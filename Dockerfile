@@ -15,16 +15,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     unzip \
+    tar \
     python3-pip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # =====================================================
-# 📱 Instala PhoneInfoga (última versão release)
+# 📱 Instala PhoneInfoga (versão 2.10.8, amd64 compatível com Render)
 # =====================================================
-RUN wget https://github.com/sundowndev/phoneinfoga/releases/latest/download/phoneinfoga_Linux_x86_64.zip \
-    && unzip phoneinfoga_Linux_x86_64.zip -d /usr/local/bin \
+RUN wget https://github.com/sundowndev/phoneinfoga/releases/download/v2.10.8/phoneinfoga_Linux_x86_64.tar.gz \
+    && tar -xzf phoneinfoga_Linux_x86_64.tar.gz -C /usr/local/bin \
     && chmod +x /usr/local/bin/phoneinfoga \
-    && rm phoneinfoga_Linux_x86_64.zip
+    && rm phoneinfoga_Linux_x86_64.tar.gz
 
 # Diretório de trabalho do projeto
 WORKDIR /app
