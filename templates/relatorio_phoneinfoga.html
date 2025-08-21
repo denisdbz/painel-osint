@@ -4,13 +4,45 @@
   <h2 class="text-xl font-bold mb-4">📱 Resultado PhoneInfoga - {{ numero }}</h2>
 
   {% if dados %}
-    <div class="bg-gray-900 p-4 rounded shadow text-white">
-      <pre class="whitespace-pre-wrap">{{ dados | tojson(indent=2) }}</pre>
+    <!-- Renderização amigável -->
+    <div class="grid gap-4 md:grid-cols-2">
+      {% for key, value in dados.items() %}
+        <div class="p-4 rounded shadow bg-gray-900 text-white light:bg-gray-100 light:text-black">
+          <h3 class="font-semibold text-lg mb-2">{{ key | capitalize }}</h3>
+
+          {% if value is mapping %}
+            <ul class="list-disc ml-4 space-y-1">
+              {% for k, v in value.items() %}
+                <li><strong>{{ k | capitalize }}:</strong> {{ v }}</li>
+              {% endfor %}
+            </ul>
+          {% elif value is iterable and value is not string %}
+            <ul class="list-disc ml-4 space-y-1">
+              {% for item in value %}
+                <li>{{ item }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p>{{ value }}</p>
+          {% endif %}
+        </div>
+      {% endfor %}
     </div>
+
+    <!-- Fallback: JSON cru, colapsável -->
+    <details class="mt-6">
+      <summary class="cursor-pointer text-blue-400">📂 Ver JSON completo</summary>
+      <pre class="whitespace-pre-wrap p-3 mt-2 rounded bg-gray-800 text-white text-sm overflow-x-auto">
+{{ dados | tojson(indent=2) }}
+      </pre>
+    </details>
+
   {% else %}
     <p class="text-red-400">Nenhum dado encontrado.</p>
   {% endif %}
 
-  <a href="{{ url_for('phoneinfoga') }}" class="text-blue-400 hover:underline mt-4 block">🔙 Nova consulta</a>
+  <a href="{{ url_for('phoneinfoga') }}" class="text-blue-400 hover:underline mt-6 block">
+    🔙 Nova consulta
+  </a>
 </div>
 {% endblock %}
