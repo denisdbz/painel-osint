@@ -68,13 +68,12 @@ def phoneinfoga():
         json_path = os.path.join(pasta_relatorios, f"phoneinfoga_{numero}.json")
 
         try:
-            result = subprocess.run(
-                ["/usr/local/bin/phoneinfoga", "scan", "-n", numero, "-o", json_path, "-f", "json"],
-                capture_output=True,
-                text=True,
-                timeout=120
-            )
-
+result = subprocess.run(
+    ["/usr/local/bin/phoneinfoga", "scan", "-n", numero, "-o", json_path, "-f", "json"],
+    capture_output=True,
+    text=True,
+    timeout=120
+)
             if result.returncode != 0:
                 return render_template("phoneinfoga.html", erro=f"Erro ao executar PhoneInfoga: {result.stderr}")
 
