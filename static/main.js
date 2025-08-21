@@ -1,34 +1,71 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-  function setProgress(id, val) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    val = Math.max(0, Math.min(100, val)); // garante 0-100
-    el.style.width = val + "%";
-    el.textContent = val + "%"; // opcional: mostrar percentual
+  // ==============================
+  // Função appendVazamento (links clicáveis e cores)
+  // ==============================
+  function appendVazamento(text) {
+    const out = document.getElementById("out-vazamento");
+    if (!out) return;
+
+    let formatted = text;
+
+    if (typeof text === "string" && text.startsWith("[+]")) {
+      const urlMatch = text.match(/https?:\/\/\S+/);
+      if (urlMatch) {
+        formatted = `<span style="color:#2ee6a5;font-weight:bold;">[+] <a href="${urlMatch[0]}" target="_blank" rel="noopener noreferrer">${urlMatch[0]}</a></span>`;
+      } else {
+        formatted = `<span style="color:#2ee6a5;font-weight:bold;">${text}</span>`;
+      }
+    } else if (typeof text === "string" && text.startsWith("[-]")) {
+      formatted = `<span style="color:#ff3860;">${text}</span>`;
+    } else if (typeof text === "string" && text.startsWith("[x]")) {
+      formatted = `<span style="color:#f3c623;">${text}</span>`;
+    } else {
+      // não escapa HTML, mantém links vindos do backend
+      formatted = text;
+    }
+
+    out.innerHTML += formatted + "<br/>";
+    out.scrollTop = out.scrollHeight;
   }
 
+  // ==============================
+  // Função genérica appendOut (Sherlock, Metaweb, etc.)
+  // ==============================
   function appendOut(tool, text) {
     const out = document.getElementById(`out-${tool}`);
     if (!out) return;
 
-    // Para Sherlock, permitimos HTML (links)
     if (tool === "sherlock") {
-        out.innerHTML += text + "<br/>";
+      // Sherlock já envia HTML formatado (links clicáveis)
+      out.innerHTML += text + "<br/>";
     } else {
-        // Para outras ferramentas, inserimos texto puro por segurança.
-        // Caso já queira renderizar HTML para metaweb, troque por innerHTML com sanitização.
-        out.textContent += text + "\n";
+      // Outras ferramentas: texto puro por segurança
+      out.textContent += text + "\n";
     }
 
     out.scrollTop = out.scrollHeight;
   }
 
+  // ==============================
+  // Progress bar sem números
+  // ==============================
+  function setProgress(id, val) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    val = Math.max(0, Math.min(100, val));
+    el.style.width = val + "%";
+    // 🔥 removemos o texto de porcentagem
+    // el.textContent = val + "%";
+  }
+
+  // ==============================
+  // Função startSSE (genérica)
+  // ==============================
   function startSSE(tool, task_id) {
     const out = document.getElementById(`out-${tool}`);
     if (out) {
-      // limpa mantendo a natureza do elemento (texto ou html)
-      out.textContent = "";
+      out.textContent = ""; // limpa output antes de iniciar
     }
     const progressEl = document.getElementById(`pg-${tool}`);
     let progress = 0;
@@ -37,28 +74,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function advanceProgress(increment = 1) {
       if (!progressEl) return;
-      progress = Math.min(95, progress + increment); // nunca passa 95 até receber 'done'
+      progress = Math.min(95, progress + increment);
       setProgress(`pg-${tool}`, progress);
     }
 
-    // handler genérico para mensagens que tenham { "line": "..." }
     es.addEventListener("log", (evt) => {
       const raw = evt.data;
       if (!raw) return;
       try {
         const d = JSON.parse(raw);
-        // exibe apenas quando line existe e não é vazio
         if (Object.prototype.hasOwnProperty.call(d, "line")) {
           if (d.line !== null && d.line !== undefined && d.line !== "") {
             appendOut(tool, d.line);
-          } else {
-            // linha vazia: ignora para não poluir a UI
           }
         } else {
           appendOut(tool, JSON.stringify(d));
         }
       } catch (e) {
-        // evt.data pode ser texto simples
         appendOut(tool, raw);
       }
       advanceProgress(1);
@@ -106,7 +138,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     es.addEventListener("error", (evt) => {
-      // evt.data pode ser undefined em erros de conexão; tratamos isso
       const raw = (evt && evt.data) ? evt.data : null;
       if (!raw) {
         appendOut(tool, "[ERROR] connection or streaming error (no data)");
@@ -121,14 +152,12 @@ document.addEventListener("DOMContentLoaded", () => {
       try { es.close(); } catch (e) {}
     });
 
-    es.addEventListener("ping", () => {
-      // opcional: poderia avançar lentamente a barra se quiser
-    });
-
     return es;
   }
 
-  // SHERLOCK
+  // ==============================
+  // Sherlock Form
+  // ==============================
   const sherlockForm = document.getElementById("sherlock-form");
   if (sherlockForm) {
     sherlockForm.addEventListener("submit", async (e) => {
@@ -147,7 +176,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // VAZAMENTO
+  // ==============================
+  // Vazamento Form
+  // ==============================
   const vazForm = document.getElementById("vazamento-form");
   if (vazForm) {
     vazForm.addEventListener("submit", async (e) => {
@@ -174,13 +205,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const data = await res.json();
 
-      // SSE customizado para vazamento
       const out = document.getElementById("out-vazamento");
-      if (out) out.innerHTML = ""; // limpa saída (usamos innerHTML no appendVazamento)
+      if (out) out.innerHTML = ""; // limpa saída
 
       const es = startSSE("vazamento", data.task_id);
 
-      // Substitui appendOut por appendVazamento para logs específicos
+      // Substitui logs do vazamento para usar appendVazamento
       es.addEventListener("log", (evt) => {
         const raw = evt.data;
         if (!raw) return;
@@ -200,33 +230,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Função appendVazamento com cores e links clicáveis
-  function appendVazamento(text) {
-    const out = document.getElementById("out-vazamento");
-    if (!out) return;
-
-    let formatted = text;
-
-    if (typeof text === "string" && text.startsWith("[+]")) {
-      const urlMatch = text.match(/https?:\/\/\S+/);
-      if (urlMatch) {
-        formatted = `<span style="color:#2ee6a5;font-weight:bold;">[+] <a href="${urlMatch[0]}" target="_blank" rel="noopener noreferrer">${urlMatch[0]}</a></span>`;
-      } else {
-        formatted = `<span style="color:#2ee6a5;font-weight:bold;">${escapeHtml(text)}</span>`;
-      }
-    } else if (typeof text === "string" && text.startsWith("[-]")) {
-      formatted = `<span style="color:#ff3860;">${escapeHtml(text)}</span>`;
-    } else if (typeof text === "string" && text.startsWith("[x]")) {
-      formatted = `<span style="color:#f3c623;">${escapeHtml(text)}</span>`;
-    } else {
-      formatted = escapeHtml(String(text));
-    }
-
-    out.innerHTML += formatted + "<br/>";
-    out.scrollTop = out.scrollHeight;
-  }
-
-  // METAWEB
+  // ==============================
+  // Metaweb Form
+  // ==============================
   const metaForm = document.getElementById("metaweb-form");
   if (metaForm) {
     metaForm.addEventListener("submit", async (e) => {
@@ -240,16 +246,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await res.json();
       startSSE("metaweb", data.task_id);
     });
-  }
-
-  // pequeno util: escape HTML quando for necessário
-  function escapeHtml(unsafe) {
-    return unsafe
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
   }
 
 });
