@@ -52,6 +52,60 @@ handler.setFormatter(logging.Formatter("[%(levelname)s] %(asctime)s %(message)s"
 app.logger.setLevel(logging.INFO)
 app.logger.addHandler(handler)
 
+
+# =====================================================
+# 📱 PhoneInfoga
+# =====================================================
+@app.route("/phoneinfoga", methods=["GET", "POST"])
+def phoneinfoga():
+    if request.method == "POST":
+        numero = request.form.get("numero")
+        if not numero:
+            return render_template("phoneinfoga.html", erro="Digite um número de telefone.")
+
+        pasta_relatorios = "static/relatorios/"
+        os.makedirs(pasta_relatorios, exist_ok=True)
+        json_path = os.path.join(pasta_relatorios, f"phoneinfoga_{numero}.json")
+
+        try:
+            result = subprocess.run(
+                ["phoneinfoga", "scan", "-n", numero, "-o", json_path, "-f", "json"],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+            if result.returncode != 0:
+                return render_template("phoneinfoga.html", erro=f"Erro ao executar PhoneInfoga: {result.stderr}")
+
+            with open(json_path, "r") as f:
+                dados = json.load(f)
+
+            historico_entry = {
+                "tipo": "phoneinfoga",
+                "alvo": numero,
+                "arquivo": json_path,
+                "data": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+
+            historico_file = os.path.join(pasta_relatorios, "historico.json")
+            if os.path.exists(historico_file):
+                with open(historico_file, "r") as f:
+                    historico = json.load(f)
+            else:
+                historico = []
+
+            historico.append(historico_entry)
+
+            with open(historico_file, "w") as f:
+                json.dump(historico, f, indent=2)
+
+            return render_template("relatorio_phoneinfoga.html", numero=numero, dados=dados)
+
+        except Exception as e:
+            return render_template("phoneinfoga.html", erro=f"Ocorreu um erro: {str(e)}")
+
+    return render_template("phoneinfoga.html")
 # -------------------
 # SQLite (history)
 # -------------------

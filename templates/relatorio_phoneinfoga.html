@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <h2 class="text-xl font-bold mb-4">📱 Resultado PhoneInfoga - {{ numero }}</h2>
+
+  {% if dados %}
+    <div class="bg-gray-900 p-4 rounded shadow text-white">
+      <pre class="whitespace-pre-wrap">{{ dados | tojson(indent=2) }}</pre>
+    </div>
+  {% else %}
+    <p class="text-red-400">Nenhum dado encontrado.</p>
+  {% endif %}
+
+  <a href="{{ url_for('phoneinfoga') }}" class="text-blue-400 hover:underline mt-4 block">🔙 Nova consulta</a>
+</div>
+{% endblock %}
