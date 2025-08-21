@@ -57,12 +57,18 @@ app.logger.addHandler(handler)
 # 📱 PhoneInfoga
 # =====================================================
 def detect_phoneinfoga():
-    # tenta binário local
+    # tenta binário no sistema
     bin_path = "/usr/local/bin/phoneinfoga"
     if os.path.isfile(bin_path):
         return [bin_path], "bin"
-    # tenta módulo Python
-    return [sys.executable, "-m", "phoneinfoga"], "module"
+
+    # tenta binário no diretório tools/ do projeto
+    local_path = os.path.join(os.path.dirname(__file__), "tools", "phoneinfoga")
+    if os.path.isfile(local_path):
+        return [local_path], "bin"
+
+    # se não achar em lugar nenhum
+    return None, "not_found"
 
 
 @app.route("/phoneinfoga", methods=["GET", "POST"])
