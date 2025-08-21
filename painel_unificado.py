@@ -56,6 +56,7 @@ app.logger.addHandler(handler)
 # =====================================================
 # 📱 PhoneInfoga
 # =====================================================
+
 def detect_phoneinfoga():
     # tenta binário no sistema
     bin_path = "/usr/local/bin/phoneinfoga"
@@ -70,6 +71,7 @@ def detect_phoneinfoga():
     # se não achar em lugar nenhum
     return None, "not_found"
 
+@app.route("/phoneinfoga", methods=["GET", "POST"])
 def phoneinfoga():
     if request.method == "POST":
         numero = request.form.get("numero")
@@ -95,20 +97,16 @@ def phoneinfoga():
             if result.returncode != 0:
                 return render_template("phoneinfoga.html", erro=f"Erro ao executar PhoneInfoga: {result.stderr}")
 
-            # ✅ Captura a saída padrão (stdout)
             output = result.stdout.strip()
 
-            # tenta interpretar como JSON, se não conseguir, salva como texto
             try:
                 dados = json.loads(output)
             except json.JSONDecodeError:
                 dados = {"raw_output": output}
 
-            # salva em arquivo JSON para histórico
             with open(json_path, "w") as f:
                 json.dump(dados, f, indent=2, ensure_ascii=False)
 
-            # registra no histórico
             historico_entry = {
                 "tipo": "phoneinfoga",
                 "alvo": numero,
@@ -136,9 +134,6 @@ def phoneinfoga():
             return render_template("phoneinfoga.html", erro=f"Ocorreu um erro: {str(e)}")
 
     return render_template("phoneinfoga.html")
-
-
-@app.route("/phoneinfoga", methods=["GET", "POST"])
 
 
 
