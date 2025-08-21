@@ -70,8 +70,6 @@ def detect_phoneinfoga():
     # se não achar em lugar nenhum
     return None, "not_found"
 
-
-@app.route("/phoneinfoga", methods=["GET", "POST"])
 def phoneinfoga():
     if request.method == "POST":
         numero = request.form.get("numero")
@@ -84,7 +82,8 @@ def phoneinfoga():
 
         try:
             cmd_prefix, _how = detect_phoneinfoga()
-            cmd = cmd_prefix + ["scan", "-n", numero, "-o", json_path, "-f", "json"]
+            # ✅ v2 não suporta -o/-f, apenas scan -n
+            cmd = cmd_prefix + ["scan", "-n", numero]
 
             result = subprocess.run(
                 cmd,
@@ -96,9 +95,20 @@ def phoneinfoga():
             if result.returncode != 0:
                 return render_template("phoneinfoga.html", erro=f"Erro ao executar PhoneInfoga: {result.stderr}")
 
-            with open(json_path, "r") as f:
-                dados = json.load(f)
+            # ✅ Captura a saída padrão (stdout)
+            output = result.stdout.strip()
 
+            # tenta interpretar como JSON, se não conseguir, salva como texto
+            try:
+                dados = json.loads(output)
+            except json.JSONDecodeError:
+                dados = {"raw_output": output}
+
+            # salva em arquivo JSON para histórico
+            with open(json_path, "w") as f:
+                json.dump(dados, f, indent=2, ensure_ascii=False)
+
+            # registra no histórico
             historico_entry = {
                 "tipo": "phoneinfoga",
                 "alvo": numero,
@@ -116,7 +126,7 @@ def phoneinfoga():
             historico.append(historico_entry)
 
             with open(historico_file, "w") as f:
-                json.dump(historico, f, indent=2)
+                json.dump(historico, f, indent=2, ensure_ascii=False)
 
             return render_template("relatorio_phoneinfoga.html", numero=numero, dados=dados)
 
@@ -126,6 +136,10 @@ def phoneinfoga():
             return render_template("phoneinfoga.html", erro=f"Ocorreu um erro: {str(e)}")
 
     return render_template("phoneinfoga.html")
+
+
+@app.route("/phoneinfoga", methods=["GET", "POST"])
+
 
 
 # -------------------
