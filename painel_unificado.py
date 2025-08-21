@@ -24,7 +24,6 @@ from flask import (
 )
 from flask_cors import CORS
 
-
 # ----------------------
 # Config / paths
 # ----------------------
@@ -133,6 +132,8 @@ def phoneinfoga():
 
     # GET
     return render_template("phoneinfoga.html")
+
+
 # -------------------
 # SQLite (history)
 # -------------------
@@ -292,6 +293,8 @@ def sse_stream(task_id):
     finally:
         streams.pop(task_id, None)
         app.logger.debug("sse_stream finished for %s", task_id)
+
+
 # -------------------
 # Helpers
 # -------------------
@@ -375,7 +378,7 @@ def file_hashes(path):
 # Workers (cada worker acumula saída e grava histórico)
 # -------------------
 
-def _sherlock_worker(task_id, username):y
+def _sherlock_worker(task_id, username):
 
     lines = []
     found_count = 0
@@ -437,6 +440,7 @@ def _sherlock_worker(task_id, username):y
 
     except Exception as e:
         sse_put(task_id, "status", {"phase": "error", "msg": str(e)})
+
 
 # -------------------
 # Views / pages & SSE endpoint
@@ -703,3 +707,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.logger.info("Starting app on port %s", port)
     app.run(host="0.0.0.0", port=port, debug=False)
+
