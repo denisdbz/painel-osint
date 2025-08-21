@@ -9,11 +9,13 @@
     </div>
   {% endif %}
 
-  <form method="POST" class="space-y-4">
+  <form id="phoneinfoga-form" method="POST" class="space-y-4">
     <input type="text" name="numero" placeholder="+5511999999999"
-           class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white" required>
+           class="w-full p-3 rounded border border-gray-400 bg-white text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
+           required>
+
     <button type="submit"
-            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow">
+            class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded shadow">
       🔍 Buscar
     </button>
   </form>

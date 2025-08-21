@@ -245,3 +245,27 @@ button {
   align-items: center;
   justify-content: center;
 }
+/* Ajustes no input e botão do PhoneInfoga */
+#phoneinfoga-form input[type="text"],
+#phoneinfoga-form input[type="number"] {
+    width: 100%;          /* ocupa largura total do container */
+    padding: 12px;        /* mais espaço interno */
+    font-size: 16px;      /* texto maior e mais legível */
+    border-radius: 10px;  /* cantos arredondados */
+    border: 1px solid #ccc;
+    background-color: #fff;
+    color: #000;          /* garante contraste com o fundo */
+}
+
+#phoneinfoga-form button {
+    padding: 8px 16px;    /* botão mais compacto */
+    font-size: 14px;      /* reduz tamanho da fonte */
+    border-radius: 8px;
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+}
+
+#phoneinfoga-form button:hover {
+    background-color: #0056b3;
+}
