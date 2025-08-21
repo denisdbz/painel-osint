@@ -102,26 +102,25 @@ def phoneinfoga():
 
             output = result.stdout.strip()
 
-            try:
-                dados = json.loads(output)
-            except json.JSONDecodeError:
-                dados = {"raw_output": output}
+try:
+    dados = json.loads(output)
+except json.JSONDecodeError:
+    dados = {"raw_output": output}
 
-            # salvar relatório
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(dados, f, indent=2, ensure_ascii=False)
-
+# salvar relatório
+with open(json_path, "w", encoding="utf-8") as f:
+    json.dump(dados, f, indent=2, ensure_ascii=False)
             # 🔎 extrair links com regex
             raw_text = json.dumps(dados, ensure_ascii=False)
             links = re.findall(r'https?://[^\s"\'<>]+', raw_text)
 
-            return render_template(
-                "relatorio_phoneinfoga.html",
-                numero=numero,
-                dados=dados,
-                links=links
-            )
-
+return render_template(
+    "relatorio_phoneinfoga.html",
+    numero=numero,
+    dados=dados,
+    dados_json=json.dumps(dados, ensure_ascii=False),
+    links=links
+)
         except Exception as e:
             return render_template("phoneinfoga.html", erro=str(e))
 
