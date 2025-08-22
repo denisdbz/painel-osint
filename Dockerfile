@@ -27,7 +27,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # =====================================================
 # Instala PhoneInfoga (versão 2.10.8, amd64 compatível com Render)
 # =====================================================
-# Note: Mantido para garantir que PhoneInfoga esteja no PATH
 RUN wget https://github.com/sundowndev/phoneinfoga/releases/download/v2.10.8/phoneinfoga_Linux_x86_64.tar.gz \
     && tar -xzf phoneinfoga_Linux_x86_64.tar.gz -C /usr/local/bin \
     && chmod +x /usr/local/bin/phoneinfoga \
@@ -42,8 +41,6 @@ RUN git clone https://github.com/sherlock-project/sherlock.git tools/sherlock \
 # =====================================================
 # Copia o projeto principal
 # =====================================================
-# O diretório de trabalho já é /opt/render/project/src
-# Copia os arquivos do projeto para o diretório de trabalho
 COPY . .
 
 # Instala as bibliotecas Python do projeto principal
@@ -54,6 +51,10 @@ RUN pip install -r requirements.txt
 ENV PORT=10000
 EXPOSE 10000
 
-# Comando para iniciar a aplicação com Gunicorn
-CMD ["gunicorn", "-b", "0.0.0.0:10000", "painel_unificado:create_app()"]
+# Número de workers configurável (Render recomenda usar variável de ambiente WEB_CONCURRENCY)
+ENV WEB_CONCURRENCY=1
 
+# Comando para iniciar a aplicação com Gunicorn
+# - gevent -> suporte async
+# - t 180 -> timeout aumentado
+CMD ["sh", "-c", "gunicorn -k gevent -w ${WEB_CONCURRENCY:-1} -t 180 -b 0.0.0.0:10000 painel_unificado:create_app()"]

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container">
+<div class="container mx-auto px-4">
   <h2 class="text-xl font-bold mb-4">📱 PhoneInfoga - Análise de Números</h2>
 
   {% if erro %}
@@ -9,13 +9,17 @@
     </div>
   {% endif %}
 
-  <form id="phoneinfoga-form" method="POST" class="space-y-4 sm:flex sm:space-y-0 sm:space-x-2">
+  <form id="phoneinfoga-form" method="POST" 
+        class="space-y-4 sm:space-y-0 sm:flex sm:space-x-2">
+    
+    <!-- Campo de número -->
     <input type="text" name="numero" placeholder="+5511999999999"
-           class="flex-1 p-3 rounded border border-gray-400 bg-white text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
+           class="flex-1 p-3 rounded border border-gray-500 bg-gray-700 text-white text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
            required>
 
+    <!-- Botão -->
     <button type="submit"
-            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow">
+            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow w-full sm:w-auto">
       🔍 Buscar
     </button>
   </form>

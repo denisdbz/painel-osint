@@ -42,7 +42,9 @@
         <h4 class="mb-3">📄 Detalhes brutos</h4>
         <details>
           <summary class="mb-2">Clique para expandir</summary>
-          <pre class="bg-black text-light p-3 rounded overflow-auto" style="max-height: 400px; white-space: pre-wrap; word-wrap: break-word;">{{ dados | tojson(indent=2, ensure_ascii=False) }}</pre>
+
+<pre class="whitespace-pre-wrap">{{ dados | tojson(indent=2) }}</pre>
+
         </details>
       </div>
     </div>
