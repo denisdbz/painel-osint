@@ -1,4 +1,4 @@
-# Usa uma imagem base Python slim
+# Usa imagem base Python slim
 FROM python:3.12-slim
 
 # Impede prompts interativos durante a instalação de pacotes
