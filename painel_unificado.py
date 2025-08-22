@@ -120,11 +120,13 @@ def phoneinfoga():
             raw_text = json.dumps(dados, ensure_ascii=False)
             links = re.findall(r'https?://[^\s"\'<>]+', raw_text)
 
+            # Corrigido: Passe apenas a string JSON para o template para evitar o erro `ensure_ascii`
+            dados_json_string = json.dumps(dados, indent=2, ensure_ascii=False)
+
             return render_template(
                 "relatorio_phoneinfoga.html",
                 numero=numero,
-                dados=dados,
-                dados_json=json.dumps(dados, ensure_ascii=False),
+                dados_json=dados_json_string, # Apenas a string é passada
                 links=links
             )
         except Exception as e:
@@ -369,24 +371,25 @@ def file_hashes(path):
 # -------------------
 
 def _sherlock_worker(task_id, username):
-    lines = []
-    found_count = 0
     try:
         sse_put(task_id, "status", {"phase": "starting", "msg": f"Iniciando análise com Sherlock para {username}"})
-        
+
         # Tentativa de rodar de um venv ou global
         cmd = ["/opt/render/project/src/.venv/bin/sherlock", username, "--print-found", "--timeout", "15"]
-        
+
         # Verifica se o executável existe
         if not os.path.exists(cmd[0]):
             cmd = ["sherlock", username, "--print-found", "--timeout", "15"]
 
         # Usa a nova função de streaming
+        found_count = 0
         for line in run_command_stream(cmd):
             sse_put(task_id, "output", {"line": line})
             if "http" in line or "found" in line.lower():
                 found_count += 1
-        
+            if line.startswith("[+]"):
+                sse_put(task_id, "found", {"url": line.split(" ")[-1]})
+
         sse_put(task_id, "status", {"phase": "finished", "msg": f"Análise concluída. {found_count} resultados encontrados."})
 
     except Exception as e:
@@ -396,8 +399,11 @@ def _vazamento_worker(task_id, email, password=None):
     try:
         sse_put(task_id, "status", {"phase": "starting", "msg": "Rodando Holehe (checagem de vazamentos)"})
         cmd = ["/opt/render/project/src/.venv/bin/holehe", email]
+        
+        # Use a função de streaming
         for line in run_command_stream(cmd):
             sse_put(task_id, "output", {"line": line})
+
         sse_put(task_id, "status", {"phase": "finished", "msg": "Holehe finalizado"})
     except Exception as e:
         sse_put(task_id, "status", {"phase": "error", "msg": str(e)})
@@ -410,8 +416,11 @@ def _metaweb_worker(task_id, file_path=None, target=None):
             cmd += ["--file", file_path]
         if target:
             cmd += ["--target", target]
+            
+        # Corrigido: o problema de path foi resolvido ao criar o script
         for line in run_command_stream(cmd):
             sse_put(task_id, "output", {"line": line})
+            
         sse_put(task_id, "status", {"phase": "finished", "msg": "MetaWeb finalizado"})
     except Exception as e:
         sse_put(task_id, "status", {"phase": "error", "msg": str(e)})
@@ -419,9 +428,18 @@ def _metaweb_worker(task_id, file_path=None, target=None):
 def _phoneinfoga_worker(task_id, number):
     try:
         sse_put(task_id, "status", {"phase": "starting", "msg": "Rodando PhoneInfoga"})
-        cmd = ["phoneinfoga", "scan", "-n", number]
+        
+        # Detecta o executável de forma mais robusta
+        cmd, how = detect_phoneinfoga()
+        if not cmd:
+            raise FileNotFoundError("PhoneInfoga executable not found.")
+        cmd.append("scan")
+        cmd.append("-n")
+        cmd.append(number)
+        
         for line in run_command_stream(cmd):
             sse_put(task_id, "output", {"line": line})
+        
         sse_put(task_id, "status", {"phase": "finished", "msg": "PhoneInfoga finalizado"})
     except Exception as e:
         sse_put(task_id, "status", {"phase": "error", "msg": str(e)})
