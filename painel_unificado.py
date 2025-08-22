@@ -73,6 +73,9 @@ def detect_phoneinfoga():
     return None, "not_found"
 
 
+# =====================================================
+# 📱 PhoneInfoga
+# =====================================================
 @app.route("/phoneinfoga", methods=["GET", "POST"])
 def phoneinfoga():
     if request.method == "POST":
@@ -85,56 +88,43 @@ def phoneinfoga():
         json_path = os.path.join(pasta_relatorios, f"phoneinfoga_{numero}.json")
 
         try:
-            cmd_prefix, _how = detect_phoneinfoga()
-            if not cmd_prefix:
-                return render_template("phoneinfoga.html", erro="PhoneInfoga não encontrado.")
-
-            # v2 não suporta -o/-f, apenas scan -n
-            cmd = cmd_prefix + ["scan", "-n", numero]
-
             result = subprocess.run(
-                cmd,
+                ["/usr/local/bin/phoneinfoga", "scan", "-n", numero, "-o", json_path, "-f", "json"],
                 capture_output=True,
                 text=True,
                 timeout=120
             )
-
             if result.returncode != 0:
-                return render_template(
-                    "phoneinfoga.html",
-                    erro=f"Erro ao executar PhoneInfoga: {result.stderr}"
-                )
+                return render_template("phoneinfoga.html", erro=f"Erro ao executar PhoneInfoga: {result.stderr}")
 
-            output = result.stdout.strip()
+            with open(json_path, "r") as f:
+                dados = json.load(f)
 
-            try:
-                dados = json.loads(output)
-            except json.JSONDecodeError:
-                dados = {"raw_output": output}
+            historico_entry = {
+                "tipo": "phoneinfoga",
+                "alvo": numero,
+                "arquivo": json_path,
+                "data": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
 
-            # salvar relatório
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(dados, f, indent=2, ensure_ascii=False)
+            historico_file = os.path.join(pasta_relatorios, "historico.json")
+            if os.path.exists(historico_file):
+                with open(historico_file, "r") as f:
+                    historico = json.load(f)
+            else:
+                historico = []
 
-            # 🔎 extrair links com regex
-            raw_text = json.dumps(dados, ensure_ascii=False)
-            links = re.findall(r'https?://[^\s"\'<>]+', raw_text)
+            historico.append(historico_entry)
 
-            # Corrigido: Passe apenas a string JSON para o template para evitar o erro `ensure_ascii`
-            dados_json_string = json.dumps(dados, indent=2, ensure_ascii=False)
+            with open(historico_file, "w") as f:
+                json.dump(historico, f, indent=2)
 
-            return render_template(
-                "relatorio_phoneinfoga.html",
-                numero=numero,
-                dados_json=dados_json_string, # Apenas a string é passada
-                links=links
-            )
+            return render_template("relatorio_phoneinfoga.html", numero=numero, dados=dados)
+
         except Exception as e:
-            return render_template("phoneinfoga.html", erro=str(e))
+            return render_template("phoneinfoga.html", erro=f"Ocorreu um erro: {str(e)}")
 
-    # GET
     return render_template("phoneinfoga.html")
-
 
 # -------------------
 # SQLite (history)

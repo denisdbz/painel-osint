@@ -25,10 +25,9 @@
   </form>
 </div>
 
-{% if dados_json %}
+{% if dados_json is defined and dados_json %}
 <script>
-  const dados = {{ dados_json | safe }};
+  const dados = {{ dados_json | tojson }};
   console.log("📊 Dados recebidos:", dados);
 </script>
 {% endif %}
-{% endblock %}
