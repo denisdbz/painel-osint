@@ -53,7 +53,6 @@ handler.setFormatter(logging.Formatter("[%(levelname)s] %(asctime)s %(message)s"
 app.logger.setLevel(logging.INFO)
 app.logger.addHandler(handler)
 
-
 # =====================================================
 # 📱 PhoneInfoga
 # =====================================================
@@ -72,7 +71,6 @@ def detect_phoneinfoga():
     # se não achar em lugar nenhum
     return None, "not_found"
 
-
 # =====================================================
 # 📱 PhoneInfoga
 # =====================================================
@@ -88,8 +86,15 @@ def phoneinfoga():
         json_path = os.path.join(pasta_relatorios, f"phoneinfoga_{numero}.json")
 
         try:
+            # Detecta o comando, como feito nas outras funções
+            cmd_prefix, how = detect_phoneinfoga()
+            if not cmd_prefix:
+                return render_template("phoneinfoga.html", erro="PhoneInfoga não encontrado.")
+
+            cmd = cmd_prefix + ["scan", "-n", numero, "-o", json_path, "-f", "json"]
+
             result = subprocess.run(
-                ["/usr/local/bin/phoneinfoga", "scan", "-n", numero, "-o", json_path, "-f", "json"],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=120
@@ -99,6 +104,8 @@ def phoneinfoga():
 
             with open(json_path, "r") as f:
                 dados = json.load(f)
+
+            # ... o resto da sua lógica de salvar o histórico em arquivo
 
             historico_entry = {
                 "tipo": "phoneinfoga",
@@ -119,12 +126,14 @@ def phoneinfoga():
             with open(historico_file, "w") as f:
                 json.dump(historico, f, indent=2)
 
+
             return render_template("relatorio_phoneinfoga.html", numero=numero, dados=dados)
 
         except Exception as e:
             return render_template("phoneinfoga.html", erro=f"Ocorreu um erro: {str(e)}")
 
     return render_template("phoneinfoga.html")
+
 
 # -------------------
 # SQLite (history)
